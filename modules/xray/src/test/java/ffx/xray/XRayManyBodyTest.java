@@ -93,5 +93,6 @@ public class XRayManyBodyTest extends PJDependentTest {
         }
 
         manyBody.getManyBody().getRestartFile().delete();
+        manyBody.destroyPotentials();
     }
 }
