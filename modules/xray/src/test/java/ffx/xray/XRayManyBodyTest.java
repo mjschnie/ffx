@@ -1,5 +1,6 @@
 package ffx.xray;
 
+import ffx.algorithms.PJDependentTest;
 import ffx.numerics.Potential;
 import org.junit.After;
 import org.junit.Before;
@@ -22,7 +23,7 @@ import org.testng.Assert;
  * Tests X-Ray many body optimization and the X-Ray many body groovy script under varying parameters.
  * @author Mallory R. Tollefson
  */
-public class XRayManyBodyTest {
+public class XRayManyBodyTest extends PJDependentTest {
 
     Binding binding;
     ManyBody manyBody;
@@ -54,6 +55,7 @@ public class XRayManyBodyTest {
         }
     }
 
+    @Test
     public void testManyBodyGlobal() {
         // Set-up the input arguments for the script.
         String[] args = {"-a", "2", "-L", "2", "-s", "1", "--fi", "5",
