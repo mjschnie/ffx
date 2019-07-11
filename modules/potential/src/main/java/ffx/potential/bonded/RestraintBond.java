@@ -55,6 +55,7 @@ import org.jogamp.java3d.TransformGroup;
 import org.jogamp.vecmath.AxisAngle4d;
 import org.jogamp.vecmath.Vector3d;
 
+import static java.lang.String.format;
 import static org.apache.commons.math3.util.FastMath.pow;
 
 import ffx.crystal.Crystal;
@@ -99,8 +100,21 @@ public class RestraintBond extends BondedTerm implements LambdaInterface {
     private double[][] dEdXdL = new double[2][3];
     private int lamDependence = 0; // defaults to no lambda dependence
     private double midpoint = 0.5;
-    private double lamStart = 0.75;
-    private double lamEnd = 1.0;
+    /**
+     * Sets switching function based on user-defined lambda dependence
+     * @param switchingFunction Univariate switching function, based on lambda dependence
+     */
+    public void setSwitchingFunction(UnivariateSwitchingFunction switchingFunction){
+        this.switchingFunction = switchingFunction;
+    }
+
+    /**
+     * Sets second switching function for use with a bell curve lambda dependence
+     * @param secondSwitchingFunction Multiplicative switching function for second half of bell curve
+     */
+    public void setSecondSwitchingFunction(UnivariateSwitchingFunction secondSwitchingFunction){
+        this.secondSwitchingFunction = secondSwitchingFunction;
+    }
 
     /**
      * Sets lambda dependence based on user input
@@ -124,56 +138,11 @@ public class RestraintBond extends BondedTerm implements LambdaInterface {
     }
 
     /**
-     * Sets start and end for lambda cubic dependence
-     *
-     * @param lamStart Start of lambda cubic dependence (0.75 by default)
-     * @param lamEnd   End of lambda cubic dependence
-     */
-    public void setLambdaStartEnd(double lamStart, double lamEnd) {
-        this.lamStart = lamStart;
-        this.lamEnd = lamEnd;
-    }
-
-    /**
      * {@inheritDoc}
      */
     @Override
     public void setLambda(double lambda) {
         this.lambda = lambda;
-
-        switch (lamDependence) {
-            case 0:
-                // no lambda dependence
-                switchingFunction = new NoLambdaDependenceSwitch();
-                break;
-            case 1:
-                // cubic lambda dependence
-                if (lambda < restraintLambdaStart) {
-                    switchingFunction = new NoLambdaDependenceSwitch();
-                } else {
-                    switchingFunction = new PowerSwitch(1, 3);
-                }
-                break;
-            case 2:
-                // bell curve lambda dependence
-                double start;
-                if ((midpoint - 0.5) < 0.0) {
-                    start = 0.0;
-                } else {
-                    start = midpoint - 0.5;
-                }
-                double end = Math.min(midpoint + 0.5, 1.0);
-                switchingFunction = new MultiplicativeSwitch(start, midpoint);
-                secondSwitchingFunction = new MultiplicativeSwitch(midpoint, end);
-
-                break;
-            default:
-                // no lambda dependence
-                // merge this with 0 case?
-                switchingFunction = new NoLambdaDependenceSwitch();
-                break;
-        }
-
     }
 
     /**

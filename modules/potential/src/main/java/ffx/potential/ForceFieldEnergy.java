@@ -57,9 +57,14 @@ import static java.util.Arrays.fill;
 import static java.util.Arrays.sort;
 
 import ffx.numerics.Constraint;
+import ffx.numerics.switching.NoLambdaDependenceSwitch;
+import ffx.numerics.switching.PowerSwitch;
+import ffx.numerics.switching.UnivariateSwitchingFunction;
 import ffx.potential.constraint.SettleConstraint;
+import ffx.potential.nonbonded.*;
 import org.apache.commons.configuration2.CompositeConfiguration;
 import org.apache.commons.io.FilenameUtils;
+
 import static org.apache.commons.math3.util.FastMath.max;
 import static org.apache.commons.math3.util.FastMath.sqrt;
 
@@ -100,15 +105,7 @@ import ffx.potential.bonded.Torsion;
 import ffx.potential.bonded.TorsionTorsion;
 import ffx.potential.bonded.UreyBradley;
 import ffx.potential.extended.ExtendedSystem;
-import ffx.potential.nonbonded.COMRestraint;
-import ffx.potential.nonbonded.CoordRestraint;
-import ffx.potential.nonbonded.GeneralizedKirkwood;
-import ffx.potential.nonbonded.NCSRestraint;
-import ffx.potential.nonbonded.ParticleMeshEwald;
 import ffx.potential.nonbonded.ParticleMeshEwald.ELEC_FORM;
-import ffx.potential.nonbonded.ParticleMeshEwaldCart;
-import ffx.potential.nonbonded.ParticleMeshEwaldQI;
-import ffx.potential.nonbonded.VanDerWaals;
 import ffx.potential.parameters.BondType;
 import ffx.potential.parameters.ForceField;
 import ffx.potential.parameters.ForceField.ForceFieldBoolean;
@@ -117,6 +114,7 @@ import ffx.potential.parameters.ForceField.ForceFieldString;
 import ffx.potential.utils.EnergyException;
 import ffx.potential.utils.PotentialsFunctions;
 import ffx.potential.utils.PotentialsUtils;
+
 import static ffx.potential.parameters.ForceField.toEnumForm;
 
 /**
@@ -2481,6 +2479,7 @@ public class ForceFieldEnergy implements CrystalPotential, LambdaInterface {
 
     /**
      * Applies constraints to positions
+     *
      * @param xPrior
      * @param xNew
      */
@@ -2625,7 +2624,7 @@ public class ForceFieldEnergy implements CrystalPotential, LambdaInterface {
         assert (g != null);
         double[] grad = new double[3];
         int n = getNumberOfVariables();
-        if (g==null || g.length < n) {
+        if (g == null || g.length < n) {
             g = new double[n];
         }
         int index = 0;
@@ -2946,7 +2945,7 @@ public class ForceFieldEnergy implements CrystalPotential, LambdaInterface {
      * @param forceConstant the force constant in kcal/mole.
      * @param flatBottom    Radius of a flat-bottom potential in Angstroms.
      */
-    public void setRestraintBond(Atom a1, Atom a2, double distance, double forceConstant, double flatBottom){
+    public void setRestraintBond(Atom a1, Atom a2, double distance, double forceConstant, double flatBottom) {
         setRestraintBond(a1, a2, distance, forceConstant, flatBottom, 0);
     }
 
@@ -2977,7 +2976,50 @@ public class ForceFieldEnergy implements CrystalPotential, LambdaInterface {
         // Set lambda dependence variables
         rb.setLamDependence(lamDependence);
         rb.setMidpoint(midpoint);
-        rb.setLambdaStartEnd(lamStart, lamEnd);
+        //rb.setLambdaStartEnd(lamStart, lamEnd);
+
+        UnivariateSwitchingFunction switchingFunction;
+        UnivariateSwitchingFunction secondSwitchingFunction;
+
+        switch (lamDependence) {
+            case 0: // no lambda dependence
+                switchingFunction = new NoLambdaDependenceSwitch();
+                logger.info(format(" Restraint Bond using switching function %s", switchingFunction));
+                break;
+            case 1: // cubic lambda dependence
+                if (lambda < lamStart) {
+                    switchingFunction = new NoLambdaDependenceSwitch();
+                    logger.info(format(" Restraint Bond using switching function %s", switchingFunction));
+                } else {
+                    switchingFunction = new PowerSwitch(1, 3);
+                    logger.info(format(" Restraint Bond using switching function %s", switchingFunction));
+                }
+                break;
+            case 2: // bell curve lambda dependence
+                double start;
+                if ((midpoint - 0.5) < 0.0) {
+                    start = 0.0;
+                } else {
+                    start = midpoint - 0.5;
+                }
+                double end = Math.min(midpoint + 0.5, 1.0);
+
+                switchingFunction = new MultiplicativeSwitch(start, midpoint);
+                secondSwitchingFunction = new MultiplicativeSwitch(midpoint, end);
+
+                rb.setSecondSwitchingFunction(secondSwitchingFunction);
+                logger.info(format(" Restraint Bond using switching functions %s and %s", switchingFunction, secondSwitchingFunction));
+
+                break;
+            default: // no lambda dependence
+                // merge this with 0 case?
+                switchingFunction = new NoLambdaDependenceSwitch();
+                logger.info(format(" Restraint Bond using switching function %s", switchingFunction));
+                break;
+        }
+
+        // Set switching function (first switching function in the case of bell curve lambda dependence)
+        rb.setSwitchingFunction(switchingFunction);
 
         // As long as we continue to add elements one-at-a-time to an array, this code will continue to be ugly.
         RestraintBond[] newRbs = new RestraintBond[++nRestraintBonds];

@@ -16,7 +16,7 @@ public class NoLambdaDependenceSwitch implements UnivariateSwitchingFunction {
      */
     @Override
     public double getOneBound() {
-        return 0;
+        return 1;
     }
 
     /**
@@ -40,7 +40,7 @@ public class NoLambdaDependenceSwitch implements UnivariateSwitchingFunction {
      */
     @Override
     public int getHighestOrderZeroDerivative() {
-        return 2;
+        return 1;
     }
 
     /**
