@@ -41,6 +41,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Logger;
 
+import ffx.numerics.switching.NoLambdaDependenceSwitch;
+import ffx.numerics.switching.PowerSwitch;
+import ffx.numerics.switching.UnivariateSwitchingFunction;
 import ffx.potential.nonbonded.MultiplicativeSwitch;
 import org.graalvm.compiler.core.common.type.ArithmeticOpTable;
 import org.jogamp.java3d.BranchGroup;
@@ -51,12 +54,14 @@ import org.jogamp.java3d.Transform3D;
 import org.jogamp.java3d.TransformGroup;
 import org.jogamp.vecmath.AxisAngle4d;
 import org.jogamp.vecmath.Vector3d;
+
 import static org.apache.commons.math3.util.FastMath.pow;
 
 import ffx.crystal.Crystal;
 import ffx.numerics.atomic.AtomicDoubleArray3D;
 import ffx.potential.bonded.RendererCache.ViewModel;
 import ffx.potential.parameters.BondType;
+
 import static ffx.numerics.math.VectorMath.angle;
 import static ffx.numerics.math.VectorMath.cross;
 import static ffx.numerics.math.VectorMath.diff;
@@ -87,17 +92,46 @@ public class RestraintBond extends BondedTerm implements LambdaInterface {
     private double restraintLambdaStart = 0.75;
     private final double restraintLambdaStop = 1.00;
     private double restraintLambdaWindow = (restraintLambdaStop - restraintLambdaStart);
+    private UnivariateSwitchingFunction switchingFunction;
+    private UnivariateSwitchingFunction secondSwitchingFunction;
     private double dEdL = 0.0;
     private double d2EdL2 = 0.0;
     private double[][] dEdXdL = new double[2][3];
-    private int lamDependence = 0;
+    private int lamDependence = 0; // defaults to no lambda dependence
+    private double midpoint = 0.5;
+    private double lamStart = 0.75;
+    private double lamEnd = 1.0;
 
     /**
-     * Sets lambda dependence based on input to the ForceFieldEnergy class
-     * @param lamDependence
+     * Sets lambda dependence based on user input
+     * 0: no lambda dependence
+     * 1: cubic lambda dependence
+     * 2: bell curve lambda dependence
+     *
+     * @param lamDependence Integer to describe lambda dependence
      */
-    public void setLamDependence(int lamDependence){
+    public void setLamDependence(int lamDependence) {
         this.lamDependence = lamDependence;
+    }
+
+    /**
+     * Sets midpoint of lambda bell curve dependence
+     *
+     * @param midpoint Midpoint of bell curve
+     */
+    public void setMidpoint(double midpoint) {
+        this.midpoint = midpoint;
+    }
+
+    /**
+     * Sets start and end for lambda cubic dependence
+     *
+     * @param lamStart Start of lambda cubic dependence (0.75 by default)
+     * @param lamEnd   End of lambda cubic dependence
+     */
+    public void setLambdaStartEnd(double lamStart, double lamEnd) {
+        this.lamStart = lamStart;
+        this.lamEnd = lamEnd;
     }
 
     /**
@@ -107,54 +141,36 @@ public class RestraintBond extends BondedTerm implements LambdaInterface {
     public void setLambda(double lambda) {
         this.lambda = lambda;
 
-        switch (this.lamDependence){
+        switch (lamDependence) {
             case 0:
                 // no lambda dependence
-                restraintLambda = 1.0;
-                rL3 = 1.0;
-                rL2 = 1.0;
-                rL1 = 1.0;
+                switchingFunction = new NoLambdaDependenceSwitch();
                 break;
             case 1:
                 // cubic lambda dependence
                 if (lambda < restraintLambdaStart) {
-                    restraintLambda = 1.0;
-                    rL3 = 1.0;
-                    rL2 = 0.0;
-                    rL1 = 0.0;
+                    switchingFunction = new NoLambdaDependenceSwitch();
                 } else {
-                    restraintLambda = 1.0 - (lambda - restraintLambdaStart) / restraintLambdaWindow;
-                    rL3 = pow(restraintLambda, 3.0);
-                    rL2 = -3.0 * pow(restraintLambda, 2.0) / restraintLambdaWindow;
-                    rL1 = 6.0 * restraintLambda / (restraintLambdaWindow * restraintLambdaWindow);
+                    switchingFunction = new PowerSwitch(1, 3);
                 }
                 break;
             case 2:
                 // bell curve lambda dependence
-                MultiplicativeSwitch switch1 = new MultiplicativeSwitch(0.0, 0.5);
-                MultiplicativeSwitch switch2 = new MultiplicativeSwitch(0.5, 1.0);
-
-                if(lambda>0.5){
-                    // Use switch 2
-                    restraintLambda = 1.0 - (lambda - restraintLambdaStart) / restraintLambdaWindow;
-                    rL3 = switch2.dtaper(restraintLambda);
-                    rL2 = switch2.secondDerivative(restraintLambda);
-                    rL1 = switch2.nthDerivative(restraintLambda, 3);
-                } else{
-                    // Use switch 1
-                    restraintLambda = 1.0 - (lambda - restraintLambdaStart) / restraintLambdaWindow;
-                    rL3 = switch1.dtaper(restraintLambda);
-                    rL2 = switch1.secondDerivative(restraintLambda);
-                    rL1 = switch1.nthDerivative(restraintLambda, 3);
+                double start;
+                if ((midpoint - 0.5) < 0.0) {
+                    start = 0.0;
+                } else {
+                    start = midpoint - 0.5;
                 }
+                double end = Math.min(midpoint + 0.5, 1.0);
+                switchingFunction = new MultiplicativeSwitch(start, midpoint);
+                secondSwitchingFunction = new MultiplicativeSwitch(midpoint, end);
+
                 break;
             default:
                 // no lambda dependence
                 // merge this with 0 case?
-                restraintLambda = 1.0;
-                rL3 = 1.0;
-                rL2 = 1.0;
-                rL1 = 1.0;
+                switchingFunction = new NoLambdaDependenceSwitch();
                 break;
         }
 
@@ -715,9 +731,16 @@ public class RestraintBond extends BondedTerm implements LambdaInterface {
 
         double dv2 = dv * dv;
         double kx2 = units * bondType.forceConstant * dv2 * esvLambda;
-        energy = rL3 * kx2;
-        dEdL = rL2 * kx2;
-        d2EdL2 = rL1 * kx2;
+
+        if (lamDependence == 2 && lambda > midpoint) { // Bell curve lambda dependence, lambda above midpoint
+            energy = secondSwitchingFunction.valueAt(lambda) * kx2;
+            dEdL = secondSwitchingFunction.firstDerivative(lambda) * kx2;
+            d2EdL2 = secondSwitchingFunction.secondDerivative(lambda) * kx2;
+        } else { // No lambda dependence; cubic lambda dependence; bell curve lambda dependence, lambda below midpoint
+            energy = switchingFunction.valueAt(lambda) * kx2;
+            dEdL = switchingFunction.firstDerivative(lambda) * kx2;
+            d2EdL2 = switchingFunction.secondDerivative(lambda) * kx2;
+        }
         // Probably magnitude of the force vector
         double deddt = 2.0 * units * bondType.forceConstant * dv * esvLambda;
         double de = 0.0;
@@ -726,16 +749,26 @@ public class RestraintBond extends BondedTerm implements LambdaInterface {
             de = deddt / value;
         }
 
-        scalar(v10, rL3 * de, g0);
-        scalar(v10, -rL3 * de, g1);
+        if (lamDependence == 2 && lambda > midpoint) {
+            scalar(v10, secondSwitchingFunction.valueAt(lambda) * de, g0);
+            scalar(v10, -secondSwitchingFunction.valueAt(lambda) * de, g1);
+        } else {
+            scalar(v10, switchingFunction.valueAt(lambda) * de, g0);
+            scalar(v10, -switchingFunction.valueAt(lambda) * de, g1);
+        }
         if (gradient) {
             grad.add(threadID, atoms[0].getIndex() - 1, g0[0], g0[1], g0[2]);
             grad.add(threadID, atoms[1].getIndex() - 1, g1[0], g1[1], g1[2]);
         }
 
         // Remove the factor of rL3
-        scalar(v10, rL2 * de, g0);
-        scalar(v10, -rL2 * de, g1);
+        if (lamDependence == 2 && lambda > midpoint) {
+            scalar(v10, secondSwitchingFunction.firstDerivative(lambda) * de, g0);
+            scalar(v10, -secondSwitchingFunction.firstDerivative(lambda) * de, g1);
+        } else {
+            scalar(v10, switchingFunction.firstDerivative(lambda) * de, g0);
+            scalar(v10, -switchingFunction.firstDerivative(lambda) * de, g1);
+        }
         dEdXdL[0][0] = g0[0];
         dEdXdL[0][1] = g0[1];
         dEdXdL[0][2] = g0[2];

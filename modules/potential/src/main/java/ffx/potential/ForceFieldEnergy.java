@@ -699,6 +699,13 @@ public class ForceFieldEnergy implements CrystalPotential, LambdaInterface {
 
     private final List<Constraint> constraints;
 
+    /**
+     * Lambda Dependence Variables
+     */
+    private double midpoint = 0.5;
+    private double lamStart = 0.75;
+    private double lamEnd = 1;
+
 
     /**
      * <p>
@@ -1257,10 +1264,6 @@ public class ForceFieldEnergy implements CrystalPotential, LambdaInterface {
                 }
                 double dist;
                 int lamDependence = 0;
-                double midpoint = 0;
-                double lamStart = 0;
-                double lamEnd = 1;
-                // TODO: add token options for lambda dependence
                 switch (toks.length) {
                     case 3:
                         double[] xyz1 = new double[3];
@@ -2961,7 +2964,6 @@ public class ForceFieldEnergy implements CrystalPotential, LambdaInterface {
      *                      1: cubic dependence on lambda
      *                      2: bell curve dependence on lambda
      */
-    // TODO: add lambda dependence information
     private void setRestraintBond(Atom a1, Atom a2, double distance, double forceConstant, double flatBottom, int lamDependence) {
         restraintBondTerm = true;
         RestraintBond rb = new RestraintBond(a1, a2, crystal);
@@ -2971,7 +2973,12 @@ public class ForceFieldEnergy implements CrystalPotential, LambdaInterface {
         } else {
             rb.setBondType((new BondType(classes, forceConstant, distance, BondType.BondFunction.HARMONIC)));
         }
+
+        // Set lambda dependence variables
         rb.setLamDependence(lamDependence);
+        rb.setMidpoint(midpoint);
+        rb.setLambdaStartEnd(lamStart, lamEnd);
+
         // As long as we continue to add elements one-at-a-time to an array, this code will continue to be ugly.
         RestraintBond[] newRbs = new RestraintBond[++nRestraintBonds];
         if (restraintBonds != null && restraintBonds.length != 0) {
