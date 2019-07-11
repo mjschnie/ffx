@@ -49,6 +49,7 @@ import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static java.lang.Double.doubleToLongBits;
 import static java.lang.Double.isInfinite;
 import static java.lang.Double.isNaN;
 import static java.lang.String.format;
@@ -1242,6 +1243,7 @@ public class ForceFieldEnergy implements CrystalPotential, LambdaInterface {
                 if (toks.length < 2) {
                     throw new IllegalArgumentException(format(" restrain-distance value %s could not be parsed!", bondRest));
                 }
+                // Internally, everything starts with 0, but restrain distance starts at 1, so that 1 has to be subtracted
                 int at1 = Integer.parseInt(toks[0]) - 1;
                 int at2 = Integer.parseInt(toks[1]) - 1;
 
@@ -1254,12 +1256,18 @@ public class ForceFieldEnergy implements CrystalPotential, LambdaInterface {
                     forceConst = Double.parseDouble(toks[2]);
                 }
                 double dist;
+                int lamDependence = 0;
+                double midpoint = 0;
+                double lamStart = 0;
+                double lamEnd = 1;
+                // TODO: add token options for lambda dependence
                 switch (toks.length) {
                     case 3:
                         double[] xyz1 = new double[3];
                         xyz1 = a1.getXYZ(xyz1);
                         double[] xyz2 = new double[3];
                         xyz2 = a2.getXYZ(xyz2);
+                        // Current distance between restrained atoms
                         dist = crystal.minDistOverSymOps(xyz1, xyz2);
                         break;
                     case 4:
@@ -1270,12 +1278,30 @@ public class ForceFieldEnergy implements CrystalPotential, LambdaInterface {
                         double maxDist = Double.parseDouble(toks[4]);
                         dist = 0.5 * (minDist + maxDist);
                         flatBottomRadius = 0.5 * Math.abs(maxDist - minDist);
+                        lamDependence = 0;
+                        break;
+                    case 6: // lambda dependence: bell
+                        minDist = Double.parseDouble(toks[3]);
+                        maxDist = Double.parseDouble(toks[4]);
+                        dist = 0.5 * (minDist + maxDist);
+                        flatBottomRadius = 0.5 * Math.abs(maxDist - minDist);
+                        midpoint = Double.parseDouble(toks[5]);
+                        lamDependence = 1;
+                        break;
+                    case 7: // lambda dependence: cubic
+                        minDist = Double.parseDouble(toks[3]);
+                        maxDist = Double.parseDouble(toks[4]);
+                        dist = 0.5 * (minDist + maxDist);
+                        flatBottomRadius = 0.5 * Math.abs(maxDist - minDist);
+                        lamStart = Double.parseDouble(toks[5]);
+                        lamEnd = Double.parseDouble(toks[6]);
+                        lamDependence = 2;
                         break;
                     default:
                         throw new IllegalArgumentException(format(" restrain-distance value %s could not be parsed!", bondRest));
                 }
 
-                setRestraintBond(a1, a2, dist, forceConst, flatBottomRadius);
+                setRestraintBond(a1, a2, dist, forceConst, flatBottomRadius, lamDependence);
             } catch (Exception ex) {
                 logger.info(format(" Exception in parsing restrain-distance: %s", ex.toString()));
             }
@@ -2904,7 +2930,7 @@ public class ForceFieldEnergy implements CrystalPotential, LambdaInterface {
      * @param forceConstant the force constant in kcal/mole
      */
     public void setRestraintBond(Atom a1, Atom a2, double distance, double forceConstant) {
-        setRestraintBond(a1, a2, distance, forceConstant, 0);
+        setRestraintBond(a1, a2, distance, forceConstant, 0, 0);
     }
 
     /**
@@ -2917,7 +2943,26 @@ public class ForceFieldEnergy implements CrystalPotential, LambdaInterface {
      * @param forceConstant the force constant in kcal/mole.
      * @param flatBottom    Radius of a flat-bottom potential in Angstroms.
      */
-    private void setRestraintBond(Atom a1, Atom a2, double distance, double forceConstant, double flatBottom) {
+    public void setRestraintBond(Atom a1, Atom a2, double distance, double forceConstant, double flatBottom){
+        setRestraintBond(a1, a2, distance, forceConstant, flatBottom, 0);
+    }
+
+    /**
+     * <p>
+     * setRestraintBond</p>
+     *
+     * @param a1            a {@link ffx.potential.bonded.Atom} object.
+     * @param a2            a {@link ffx.potential.bonded.Atom} object.
+     * @param distance      a double.
+     * @param forceConstant the force constant in kcal/mole.
+     * @param flatBottom    Radius of a flat-bottom potential in Angstroms.
+     * @param lamDependence Lambda dependence
+     *                      0: no dependence on lambda
+     *                      1: cubic dependence on lambda
+     *                      2: bell curve dependence on lambda
+     */
+    // TODO: add lambda dependence information
+    private void setRestraintBond(Atom a1, Atom a2, double distance, double forceConstant, double flatBottom, int lamDependence) {
         restraintBondTerm = true;
         RestraintBond rb = new RestraintBond(a1, a2, crystal);
         int[] classes = {a1.getAtomType().atomClass, a2.getAtomType().atomClass};
@@ -2926,6 +2971,7 @@ public class ForceFieldEnergy implements CrystalPotential, LambdaInterface {
         } else {
             rb.setBondType((new BondType(classes, forceConstant, distance, BondType.BondFunction.HARMONIC)));
         }
+        rb.setLamDependence(lamDependence);
         // As long as we continue to add elements one-at-a-time to an array, this code will continue to be ugly.
         RestraintBond[] newRbs = new RestraintBond[++nRestraintBonds];
         if (restraintBonds != null && restraintBonds.length != 0) {

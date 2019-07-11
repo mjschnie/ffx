@@ -41,6 +41,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Logger;
 
+import ffx.potential.nonbonded.MultiplicativeSwitch;
+import org.graalvm.compiler.core.common.type.ArithmeticOpTable;
 import org.jogamp.java3d.BranchGroup;
 import org.jogamp.java3d.Geometry;
 import org.jogamp.java3d.LineArray;
@@ -88,6 +90,15 @@ public class RestraintBond extends BondedTerm implements LambdaInterface {
     private double dEdL = 0.0;
     private double d2EdL2 = 0.0;
     private double[][] dEdXdL = new double[2][3];
+    private int lamDependence = 0;
+
+    /**
+     * Sets lambda dependence based on input to the ForceFieldEnergy class
+     * @param lamDependence
+     */
+    public void setLamDependence(int lamDependence){
+        this.lamDependence = lamDependence;
+    }
 
     /**
      * {@inheritDoc}
@@ -96,16 +107,55 @@ public class RestraintBond extends BondedTerm implements LambdaInterface {
     public void setLambda(double lambda) {
         this.lambda = lambda;
 
-        if (lambda < restraintLambdaStart) {
-            restraintLambda = 1.0;
-            rL3 = 1.0;
-            rL2 = 0.0;
-            rL1 = 0.0;
-        } else {
-            restraintLambda = 1.0 - (lambda - restraintLambdaStart) / restraintLambdaWindow;
-            rL3 = pow(restraintLambda, 3.0);
-            rL2 = -3.0 * pow(restraintLambda, 2.0) / restraintLambdaWindow;
-            rL1 = 6.0 * restraintLambda / (restraintLambdaWindow * restraintLambdaWindow);
+        switch (this.lamDependence){
+            case 0:
+                // no lambda dependence
+                restraintLambda = 1.0;
+                rL3 = 1.0;
+                rL2 = 1.0;
+                rL1 = 1.0;
+                break;
+            case 1:
+                // cubic lambda dependence
+                if (lambda < restraintLambdaStart) {
+                    restraintLambda = 1.0;
+                    rL3 = 1.0;
+                    rL2 = 0.0;
+                    rL1 = 0.0;
+                } else {
+                    restraintLambda = 1.0 - (lambda - restraintLambdaStart) / restraintLambdaWindow;
+                    rL3 = pow(restraintLambda, 3.0);
+                    rL2 = -3.0 * pow(restraintLambda, 2.0) / restraintLambdaWindow;
+                    rL1 = 6.0 * restraintLambda / (restraintLambdaWindow * restraintLambdaWindow);
+                }
+                break;
+            case 2:
+                // bell curve lambda dependence
+                MultiplicativeSwitch switch1 = new MultiplicativeSwitch(0.0, 0.5);
+                MultiplicativeSwitch switch2 = new MultiplicativeSwitch(0.5, 1.0);
+
+                if(lambda>0.5){
+                    // Use switch 2
+                    restraintLambda = 1.0 - (lambda - restraintLambdaStart) / restraintLambdaWindow;
+                    rL3 = switch2.dtaper(restraintLambda);
+                    rL2 = switch2.secondDerivative(restraintLambda);
+                    rL1 = switch2.nthDerivative(restraintLambda, 3);
+                } else{
+                    // Use switch 1
+                    restraintLambda = 1.0 - (lambda - restraintLambdaStart) / restraintLambdaWindow;
+                    rL3 = switch1.dtaper(restraintLambda);
+                    rL2 = switch1.secondDerivative(restraintLambda);
+                    rL1 = switch1.nthDerivative(restraintLambda, 3);
+                }
+                break;
+            default:
+                // no lambda dependence
+                // merge this with 0 case?
+                restraintLambda = 1.0;
+                rL3 = 1.0;
+                rL2 = 1.0;
+                rL1 = 1.0;
+                break;
         }
 
     }
@@ -652,8 +702,9 @@ public class RestraintBond extends BondedTerm implements LambdaInterface {
             crystal.image(v10);
         }
 
+        // value is the magnitude of the separation vector
         value = r(v10);
-        double dv = value - bondType.distance;
+        double dv = value - bondType.distance; // bondType.distance = ideal bond length
         if (bondType.bondFunction.hasFlatBottom()) {
             if (dv > 0) {
                 dv = Math.max(0, dv - bondType.flatBottomRadius);
@@ -667,6 +718,7 @@ public class RestraintBond extends BondedTerm implements LambdaInterface {
         energy = rL3 * kx2;
         dEdL = rL2 * kx2;
         d2EdL2 = rL1 * kx2;
+        // Probably magnitude of the force vector
         double deddt = 2.0 * units * bondType.forceConstant * dv * esvLambda;
         double de = 0.0;
 
