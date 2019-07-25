@@ -43,7 +43,9 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
@@ -56,6 +58,7 @@ import static java.util.Arrays.fill;
 import static java.util.Arrays.sort;
 
 import ffx.numerics.Constraint;
+import ffx.potential.constraint.CcmaConstraint;
 import ffx.potential.constraint.SettleConstraint;
 import org.apache.commons.configuration2.CompositeConfiguration;
 import org.apache.commons.io.FilenameUtils;
@@ -1284,14 +1287,21 @@ public class ForceFieldEnergy implements CrystalPotential, LambdaInterface {
         String constraintStrings = forceField.getString(ForceFieldString.CONSTRAIN, forceField.getString(ForceFieldString.RATTLE, null));
         if (constraintStrings != null) {
             constraints = new ArrayList<>();
-
             logger.info(format(" Experimental: parsing constraints option %s", constraintStrings));
+
+            Set<Bond> numericBonds = new HashSet<>(1);
+            Set<Angle> numericAngles = new HashSet<>(1);
+
+            // Totally empty constrain option: constrain only X-H bonds. No other options applied.
             if (constraintStrings.isEmpty() || constraintStrings.matches("^\\s*$")) {
-                // Assume constraining only X-H bonds (i.e. RIGID-HYDROGEN).
                 logger.info(" Constraining X-H bonds.");
-                logger.severe(" TODO: Implement this.");
+                numericBonds = Arrays.stream(bonds).
+                        filter((Bond bond) -> bond.getAtom(0).getAtomicNumber() == 1 || bond.getAtom(1).getAtomicNumber() == 1).
+                        collect(Collectors.toSet());
             } else {
                 String[] constraintToks = constraintStrings.split("\\s+");
+
+                // First, accumulate SETTLE constraints.
                 for (String tok : constraintToks) {
                     if (tok.equalsIgnoreCase("WATER")) {
                         logger.info(" Constraining waters to be rigid based on angle & bonds.");
@@ -1317,15 +1327,43 @@ public class ForceFieldEnergy implements CrystalPotential, LambdaInterface {
                         settleStream = Stream.concat(settleStream, molecularAssembly.getWaters().stream());
                         // Map them into new Settle constraints and collect.
                         List<SettleConstraint> settleConstraints = settleStream.map((MSNode m) -> m.getAngleList().get(0)).
-                                map(SettleConstraint::new).
+                                map(SettleConstraint::settleFactory).
                                 collect(Collectors.toList());
                         constraints.addAll(settleConstraints);
 
-                    } else {
-                        logger.severe(" Implement constraints that aren't SETTLE constraints.");
+                    } else if (tok.equalsIgnoreCase("DIATOMIC")) {
+                        logger.severe(" Diatomic distance constraints not yet implemented properly.");
+                    } else if (tok.equalsIgnoreCase("TRIATOMIC")) {
+                        logger.severe(" Triatomic SETTLE constraints for non-water molecules not yet implemented properly.");
+                    }
+                }
+
+                // Second, accumulate bond/angle constraints.
+                for (String tok : constraintToks) {
+                    if (tok.equalsIgnoreCase("BONDS")) {
+                        numericBonds = new HashSet<>(Arrays.asList(bonds));
+                    } else if (tok.equalsIgnoreCase("ANGLES")) {
+                        numericAngles = new HashSet<>(Arrays.asList(angles));
                     }
                 }
             }
+
+            // Remove bonds that are already dealt with via angles.
+            for (Angle angle : numericAngles) {
+                numericBonds.removeAll(angle.getBondList());
+            }
+
+            // Remove already-constrained angles and bonds (e.g. SETTLE-constrained ones).
+            List<Angle> ccmaAngles = numericAngles.stream().
+                    filter((Angle ang) -> !ang.isConstrained()).
+                    collect(Collectors.toList());
+            List<Bond> ccmaBonds = numericBonds.stream().
+                    filter((Bond bond) -> !bond.isConstrained())
+                    .collect(Collectors.toList());
+
+            CcmaConstraint ccmaConstraint = CcmaConstraint.ccmaFactory(ccmaBonds, ccmaAngles,
+                    atoms, getMass(), CcmaConstraint.DEFAULT_CCMA_NONZERO_CUTOFF);
+            constraints.add(ccmaConstraint);
 
             logger.info(format(" Added %d constraints.", constraints.size()));
         } else {

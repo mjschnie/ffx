@@ -47,6 +47,7 @@ import static org.apache.commons.math3.util.FastMath.min;
 import static org.apache.commons.math3.util.FastMath.sqrt;
 import static org.apache.commons.math3.util.FastMath.toDegrees;
 
+import ffx.numerics.Constraint;
 import ffx.numerics.atomic.AtomicDoubleArray3D;
 import ffx.potential.parameters.AngleType;
 import ffx.potential.parameters.ForceField;
@@ -256,6 +257,14 @@ public class Angle extends BondedTerm {
      */
     public AngleMode getAngleMode() {
         return angleMode;
+    }
+
+    @Override
+    public void setConstraint(Constraint c) {
+        super.setConstraint(c);
+        for (Bond b : bonds) {
+            b.setConstraint(c);
+        }
     }
 
     /**
