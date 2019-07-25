@@ -30,9 +30,9 @@ public class CcmaConstraint implements Constraint {
     private final double[] lengths;
     private final int nConstraints;
     private final int[] uniqueIndices;
-    private static final int DEFAULT_MAX_ITERS = 3; // TODO: Reset to 150.
+    private static final int DEFAULT_MAX_ITERS = 150;
     private final int maxIters = DEFAULT_MAX_ITERS;
-    public static final double DEFAULT_CCMA_NONZERO_CUTOFF = 0.02;
+    public static final double DEFAULT_CCMA_NONZERO_CUTOFF = 0.01;
     private final double elementCutoff = DEFAULT_CCMA_NONZERO_CUTOFF;
     private final double[] reducedMasses;
     private final RealMatrix kInvSparse;
@@ -280,19 +280,29 @@ public class CcmaConstraint implements Constraint {
                     }
                 });
 
+        // TODO: Delete this block.
         double[][] dataDense = kInvDense.getData();
         double[][] dataSparse = kInvSparse.getData();
-        logger.info(" Dense array:");
+        logger.fine(" Dense array:");
         for (int i = 0; i < nConstraints; i++) {
-            logger.info(Arrays.toString(dataDense[i]));
+            logger.fine(Arrays.toString(dataDense[i]));
         }
-        logger.info(" Sparse array:");
+        logger.fine(" Sparse array:");
         for (int i = 0; i < nConstraints; i++) {
-            logger.info(Arrays.toString(dataSparse[i]));
+            logger.fine(Arrays.toString(dataSparse[i]));
         }
 
         // TODO: Actually do this.
-        reducedMasses = null;
+        reducedMasses = new double[nConstraints];
+        for (int i = 0; i < nConstraints; i++) {
+            int atI = atoms1[i];
+            atI *= 3; // The mass array is XYZ-indexed, not atom-indexed.
+            int atJ = atoms2[i];
+            atJ *= 3;
+            double invMassI = 1.0 / masses[atI];
+            double invMassJ = 1.0 / masses[atJ];
+            reducedMasses[i] = 0.5 / (invMassI + invMassJ);
+        }
     }
 
     @Override
@@ -321,9 +331,13 @@ public class CcmaConstraint implements Constraint {
      * @param tol Numerical tolerance.
      */
     private void applyConstraints(double[] xPrior, double[] output, double[] masses, boolean constrainV, double tol) {
-        logger.info(" We are " + constrainV + " doing velocities");
+        if (xPrior == output) {
+            throw new IllegalArgumentException(String.format(" xPrior and output must be different arrays!"));
+        }
         long time = -System.nanoTime();
-        // Distance vector for all constraints. TODO: Flatten to 1D array.
+        
+
+        /*// Distance vector for all constraints. TODO: Flatten to 1D array.
         double[][] r_ij = new double[nConstraints][3];
         // Distance magnitude for all constraints.
         double[] d_ij = new double[nConstraints];
@@ -349,12 +363,11 @@ public class CcmaConstraint implements Constraint {
 
         // Main CCMA loop.
         for (int constraintIter = 0; constraintIter <= maxIters; constraintIter++) {
-            logger.info(" xPrior: " + Arrays.toString(xPrior));
-            logger.info(" Output: " + Arrays.toString(output));
             if (constraintIter >= maxIters) {
                 throw new IllegalArgumentException(String.format(" CCMA constraint failed to converge in %d iterations!", maxIters));
             }
             nConverged = 0;
+            double rmsd = 0;
             for (int i = 0; i < nConstraints; i++) {
                 int atom1 = atoms1[i] * 3;
                 int atom2 = atoms2[i] * 3;
@@ -374,7 +387,6 @@ public class CcmaConstraint implements Constraint {
                     double rp2 = VectorMath.dot(rp_ij, rp_ij);
                     double dist2 = lengths[i] * lengths[i];
                     double diff = dist2 - rp2;
-                    constraintDelta[i] = 0;
                     double rrpr = VectorMath.dot(rp_ij, r_ij[i]);
                     constraintDelta[i] = reducedMasses[i] * diff / rrpr;
                     if (rp2 >= lowerTol * dist2 && rp2 <= upperTol * dist2) {
@@ -413,7 +425,7 @@ public class CcmaConstraint implements Constraint {
             logger.info(String.format(" %d converged at iteration %d", nConverged, constraintIter));
         }
         time += System.nanoTime();
-        logger.info(String.format(" Application of CCMA constraint: %10.4g sec", (time * 1.0E-9)));
+        logger.info(String.format(" Application of CCMA constraint: %10.4g sec", (time * 1.0E-9)));*/
     }
 
     private class MatrixWalker implements RealVectorPreservingVisitor {
