@@ -38,6 +38,8 @@
 package ffx.potential.parameters;
 
 import java.util.Comparator;
+import static java.lang.Integer.*;
+import static java.lang.StrictMath.abs;
 import static java.lang.String.format;
 
 /**
@@ -48,15 +50,14 @@ import static java.lang.String.format;
  */
 public final class VDWType extends BaseType implements Comparator<String> {
 
-    public enum RadiusSize {
+    /**
+     * Torsion modes include Normal or In-Plane
+     */
+    public enum VDWMode {
 
-        RADIUS, DIAMETER
+        NORMAL, VDW14
     }
 
-    public enum RadiusType {
-
-        RMIN, SIGMA
-    }
 
     /**
      * The atom class that uses this van der Waals parameter.
@@ -76,6 +77,10 @@ public final class VDWType extends BaseType implements Comparator<String> {
      * factor. Setting the reduction to .LT. 0.0 indicates it is not being used.
      */
     public final double reductionFactor;
+    /**
+     * Is this a normal vdW parameter or is it for 1-4 interactions.
+     */
+    public VDWMode vdwMode;
 
     /**
      * van der Waals constructor. If the reduction factor is .LE. 0.0, no
@@ -91,8 +96,27 @@ public final class VDWType extends BaseType implements Comparator<String> {
         super(ForceField.ForceFieldType.VDW, Integer.toString(atomClass));
         this.atomClass = atomClass;
         this.radius = radius;
-        this.wellDepth = wellDepth;
+        this.wellDepth = abs(wellDepth);
         this.reductionFactor = reductionFactor;
+        this.vdwMode = VDWMode.NORMAL;
+    }
+
+    /**
+     * van der Waals constructor. If the reduction factor is .LE. 0.0, no
+     * reduction is used for this atom type.
+     *
+     * @param atomClass       The atom class that uses this van der Waals parameter.
+     * @param radius          The radius of the minimum well depth energy (angstroms).
+     * @param wellDepth       The minimum energy of the vdw function (kcal/mol).
+     * @param reductionFactor Reduction factor for evaluating van der Waals pairs.
+     */
+    public VDWType(int atomClass, double radius, double wellDepth,
+                   double reductionFactor, VDWMode vdwMode) {
+        this(atomClass, radius, wellDepth, reductionFactor);
+        if (vdwMode == VDWMode.VDW14) {
+            this.vdwMode = vdwMode;
+            forceFieldType = ForceField.ForceFieldType.VDW14;
+        }
     }
 
     /**
@@ -133,16 +157,19 @@ public final class VDWType extends BaseType implements Comparator<String> {
      */
     @Override
     public String toString() {
-        String vdwString;
+        StringBuilder vdwString = new StringBuilder("vdw");
+        if (vdwMode == VDWMode.VDW14) {
+            vdwString.append("14");
+        }
+
         // No reduction factor.
         if (reductionFactor <= 0e0) {
-            vdwString = format("vdw  %5d  %11.9f  %11.9f", atomClass,
-                    radius, wellDepth);
+            vdwString.append(format("  %5d  %11.9f  %11.9f", atomClass, radius, wellDepth));
         } else {
-            vdwString = format("vdw  %5d  %11.9f  %11.9f  %5.3f",
-                    atomClass, radius, wellDepth, reductionFactor);
+            vdwString.append(format("  %5d  %11.9f  %11.9f  %5.3f", atomClass, radius, wellDepth, reductionFactor));
         }
-        return vdwString;
+
+        return vdwString.toString();
     }
 
     /**
@@ -151,8 +178,8 @@ public final class VDWType extends BaseType implements Comparator<String> {
     @Override
     public int compare(String s1, String s2) {
 
-        int t1 = Integer.parseInt(s1);
-        int t2 = Integer.parseInt(s2);
+        int t1 = parseInt(s1);
+        int t2 = parseInt(s2);
 
         return Integer.compare(t1, t2);
     }

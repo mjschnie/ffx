@@ -66,26 +66,26 @@ public class ForceField {
      * Available force fields.
      */
     public enum ForceFieldName {
-
-        AMBER99SB,
-        AMBER99SB_TIP3F,
-        AMBER99SB_TIP3AMOEBA,
-        AMOEBA_WATER,
-        AMOEBA_WATER_2003,
-        AMOEBA_WATER_2014,
+        AMBER_1994,
+        AMBER_1996,
+        AMBER_1998,
+        AMBER_1999,
+        AMBER_1999_SB,
+        AMBER_1999_SB_AMOEBA,
+        AMBER_1999_SB_TIP3F,
         AMOEBA_2004,
         AMOEBA_2009,
-        AMOEBA_2014,
-        AMOEBA_PROTEIN_2004,
-        AMOEBA_PROTEIN_2004_U1,
-        AMOEBA_PROTEIN_2013,
-        AMOEBA_DIRECT_2013,
-        AMOEBA_FIXED_2013,
         AMOEBA_BIO_2009,
-        AMOEBA_BIO_2009_ORIG,
         AMOEBA_BIO_2018,
         AMOEBA_NUC_2017,
+        AMOEBA_PROTEIN_2004,
+        AMOEBA_PROTEIN_2013,
+        AMOEBA_WATER_2003,
+        AMOEBA_WATER_2014,
+        CHARMM_22,
+        CHARMM_22_CMAP,
         IAMOEBA_WATER,
+        OPLS_AA,
         OPLS_AAL
     }
 
@@ -142,9 +142,9 @@ public class ForceField {
         /* Polarization masking rules */
         POLAR_12_SCALE, POLAR_13_SCALE, POLAR_14_SCALE, POLAR_14_INTRA, POLAR_15_SCALE, DIRECT_11_SCALE,
         /* Electrostatics parameters */
-        EWALD_CUTOFF, EWALD_ALPHA, EWALD_PRECISION, PME_MESH_DENSITY,
+        EWALD_CUTOFF, EWALD_ALPHA, EWALD_PRECISION, PME_MESH_DENSITY, ELECTRIC,
         /* Electrostatics masking rules */
-        MPOLE_11_SCALE, MPOLE_12_SCALE, MPOLE_13_SCALE, MPOLE_14_SCALE, MPOLE_15_SCALE,
+        MPOLE_11_SCALE, MPOLE_12_SCALE, MPOLE_13_SCALE, MPOLE_14_SCALE, MPOLE_15_SCALE, CHG_14_SCALE,
         /* Permanent electrostatics softcoring  */
         PERMANENT_LAMBDA_EXPONENT, PERMANENT_LAMBDA_ALPHA,
         /* Permanent electrostatics lambda window */
@@ -269,12 +269,14 @@ public class ForceField {
 
         KEYWORD,
         ANGLE,
+        ANGLEP,
         ANGTORS,
         ATOM,
         BIOTYPE,
         BOND,
         CHARGE,
         ISOLVRAD,
+        IMPROPER,
         IMPTORS,
         MULTIPOLE,
         OPBEND,
@@ -286,6 +288,7 @@ public class ForceField {
         TORTORS,
         UREYBRAD,
         VDW,
+        VDW14,
         RELATIVESOLV
     }
 
@@ -327,6 +330,7 @@ public class ForceField {
      */
     private final CompositeConfiguration properties;
     private final Map<String, AngleType> angleTypes;
+    private final Map<String, AngleType> anglepTypes;
     private final Map<String, AtomType> atomTypes;
     private final Map<String, BioType> bioTypes;
     private final Map<String, BondType> bondTypes;
@@ -340,10 +344,12 @@ public class ForceField {
     private final Map<String, AngleTorsionType> angleTorsionTypes;
     private final Map<String, PiTorsionType> piTorsionTypes;
     private final Map<String, TorsionType> torsionTypes;
+    private final Map<String, TorsionType> improperTypes;
     private final Map<String, ImproperTorsionType> imptorsTypes;
     private final Map<String, TorsionTorsionType> torsionTorsionTypes;
     private final Map<String, UreyBradleyType> ureyBradleyTypes;
     private final Map<String, VDWType> vanderWaalsTypes;
+    private final Map<String, VDWType> vanderWaals14Types;
     private final Map<String, RelativeSolvationType> relativeSolvationTypes;
     private final Map<ForceFieldType, Map> forceFieldTypes;
 
@@ -360,6 +366,7 @@ public class ForceField {
           constructor will keep the types sorted.
          */
         angleTypes = new TreeMap<>(new AngleType(new int[3], 0, new double[1], null));
+        anglepTypes = new TreeMap<>(new AngleType(new int[3], 0, new double[1], null, null));
         atomTypes = new TreeMap<>(new AtomType(0, 0, null, null, 0, 0, 0));
         bioTypes = new TreeMap<>(new BioType(0, null, null, 0, null));
         bondTypes = new TreeMap<>(new BondType(new int[2], 0, 0, null));
@@ -374,13 +381,16 @@ public class ForceField {
         angleTorsionTypes = new TreeMap<>(new AngleTorsionType(new int[4], new double[1]));
         torsionTorsionTypes = new TreeMap<>();
         torsionTypes = new TreeMap<>(new TorsionType(new int[4], new double[1], new double[1], new int[1]));
+        improperTypes = new TreeMap<>(new TorsionType(new int[4], new double[1], new double[1], new int[1]));
         imptorsTypes = new TreeMap<>(new ImproperTorsionType(new int[4], 0.0, 0.0, 2));
         ureyBradleyTypes = new TreeMap<>(new UreyBradleyType(new int[3], 0, 0));
         vanderWaalsTypes = new TreeMap<>(new VDWType(0, 0, 0, 0));
+        vanderWaals14Types = new TreeMap<>(new VDWType(0, 0, 0, 0));
         relativeSolvationTypes = new TreeMap<>(new RelativeSolvationType("", 0.0));
 
         forceFieldTypes = new EnumMap<>(ForceFieldType.class);
         forceFieldTypes.put(ForceFieldType.ANGLE, angleTypes);
+        forceFieldTypes.put(ForceFieldType.ANGLEP, anglepTypes);
         forceFieldTypes.put(ForceFieldType.ATOM, atomTypes);
         forceFieldTypes.put(ForceFieldType.BOND, bondTypes);
         forceFieldTypes.put(ForceFieldType.BIOTYPE, bioTypes);
@@ -394,10 +404,12 @@ public class ForceField {
         forceFieldTypes.put(ForceFieldType.STRTORS, stretchTorsionTypes);
         forceFieldTypes.put(ForceFieldType.ANGTORS, angleTorsionTypes);
         forceFieldTypes.put(ForceFieldType.TORSION, torsionTypes);
+        forceFieldTypes.put(ForceFieldType.IMPROPER, improperTypes);
         forceFieldTypes.put(ForceFieldType.IMPTORS, imptorsTypes);
         forceFieldTypes.put(ForceFieldType.TORTORS, torsionTorsionTypes);
         forceFieldTypes.put(ForceFieldType.UREYBRAD, ureyBradleyTypes);
         forceFieldTypes.put(ForceFieldType.VDW, vanderWaalsTypes);
+        forceFieldTypes.put(ForceFieldType.VDW14, vanderWaals14Types);
         forceFieldTypes.put(ForceFieldType.RELATIVESOLV, relativeSolvationTypes);
 
         trueImpliedBoolean(ForceFieldBoolean.ELEC_LAMBDATERM, ForceFieldBoolean.GK_LAMBDATERM);
@@ -431,6 +443,10 @@ public class ForceField {
             return;
         }
         for (AngleType angleType : angleTypes.values()) {
+            angleType.incrementClasses(classOffset);
+        }
+
+        for (AngleType angleType : anglepTypes.values()) {
             angleType.incrementClasses(classOffset);
         }
 
@@ -482,6 +498,10 @@ public class ForceField {
             torsionType.incrementClasses(classOffset);
         }
 
+        for (TorsionType torsionType : improperTypes.values()) {
+            torsionType.incrementClasses(classOffset);
+        }
+
         for (ImproperTorsionType improperTorsionType : imptorsTypes.values()) {
             improperTorsionType.incrementClasses(classOffset);
         }
@@ -492,6 +512,10 @@ public class ForceField {
 
         for (VDWType vanderWaalsType : vanderWaalsTypes.values()) {
             vanderWaalsType.incrementClass(classOffset);
+        }
+
+        for (VDWType vanderWaals14Type : vanderWaals14Types.values()) {
+            vanderWaals14Type.incrementClass(classOffset);
         }
 
         for (ISolvRadType iSolvRadType : iSolvRadTypes.values()) {
@@ -522,6 +546,10 @@ public class ForceField {
         patch.renumberForceField(classOffset, typeOffset, bioTypeOffset);
 
         for (AngleType angleType : patch.angleTypes.values()) {
+            angleTypes.put(angleType.getKey(), angleType);
+        }
+
+        for (AngleType angleType : patch.anglepTypes.values()) {
             angleTypes.put(angleType.getKey(), angleType);
         }
 
@@ -573,6 +601,10 @@ public class ForceField {
             torsionTypes.put(torsionType.getKey(), torsionType);
         }
 
+        for (TorsionType torsionType : patch.improperTypes.values()) {
+            torsionTypes.put(torsionType.getKey(), torsionType);
+        }
+
         for (ImproperTorsionType improperTorsionType : patch.imptorsTypes.values()) {
             imptorsTypes.put(improperTorsionType.getKey(), improperTorsionType);
         }
@@ -583,6 +615,10 @@ public class ForceField {
 
         for (VDWType vdwType : patch.vanderWaalsTypes.values()) {
             vanderWaalsTypes.put(vdwType.getKey(), vdwType);
+        }
+
+        for (VDWType vdwType : patch.vanderWaals14Types.values()) {
+            vanderWaals14Types.put(vdwType.getKey(), vdwType);
         }
 
         for (ISolvRadType iSolvRadType : patch.iSolvRadTypes.values()) {
@@ -981,7 +1017,11 @@ public class ForceField {
      * @return a {@link ffx.potential.parameters.AngleType} object.
      */
     public AngleType getAngleType(String key) {
-        return angleTypes.get(key);
+        AngleType angleType = angleTypes.get(key);
+        if (angleType == null) {
+            angleType = anglepTypes.get(key);
+        }
+        return angleType;
     }
 
     /**
@@ -1256,12 +1296,31 @@ public class ForceField {
 
     /**
      * <p>
+     * getVDW14Type</p>
+     *
+     * @param key a {@link java.lang.String} object.
+     * @return a {@link ffx.potential.parameters.VDWType} object.
+     */
+    public VDWType getVDW14Type(String key) { return vanderWaals14Types.get(key); }
+
+    /**
+     * <p>
      * getVDWTypes</p>
      *
      * @return a {@link java.util.Map} object.
      */
     public Map<String, VDWType> getVDWTypes() {
         return vanderWaalsTypes;
+    }
+
+    /**
+     * <p>
+     * getVDW14Types</p>
+     *
+     * @return a {@link java.util.Map} object.
+     */
+    public Map<String, VDWType> getVDW14Types() {
+        return vanderWaals14Types;
     }
 
     /**
@@ -1526,6 +1585,7 @@ public class ForceField {
          * torsionTorsionTypes.remove(currentKey);
          * addForceFieldType(torsionTorsionType); } }
          */
+
         for (TorsionType torsionType : torsionTypes.values().toArray(new TorsionType[0])) {
             TorsionType newType = torsionType.patchClasses(typeMap);
             if (newType != null) {

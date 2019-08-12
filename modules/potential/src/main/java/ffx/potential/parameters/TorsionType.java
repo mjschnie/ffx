@@ -56,6 +56,14 @@ import static org.apache.commons.math3.util.FastMath.toRadians;
 public final class TorsionType extends BaseType implements Comparator<String> {
 
     /**
+     * Torsion modes include Normal or In-Plane
+     */
+    public enum TorsionMode {
+
+        NORMAL, IMPROPER
+    }
+
+    /**
      * Atom classes that for this Torsion angle.
      */
     public final int[] atomClasses;
@@ -83,6 +91,10 @@ public final class TorsionType extends BaseType implements Comparator<String> {
      * Periodicity of the Fourier series.
      */
     private final int[] periodicity;
+    /**
+     * The torsion mode in use.
+     */
+    private TorsionMode torsionMode;
 
     /**
      * TorsionType Constructor.
@@ -102,26 +114,43 @@ public final class TorsionType extends BaseType implements Comparator<String> {
             }
         }
         terms = max;
-        if (periodicity.length != max) {
-            this.amplitude = new double[max];
-            this.phase = new double[max];
-            this.periodicity = new int[max];
-            for (int i = 0; i < periodicity.length; i++) {
-                this.amplitude[periodicity[i] - 1] = amplitude[i];
-                this.phase[periodicity[i] - 1] = phase[i];
-                this.periodicity[periodicity[i] - 1] = periodicity[i];
-            }
-        } else {
-            this.amplitude = amplitude;
-            this.phase = phase;
-            this.periodicity = periodicity;
+        this.amplitude = new double[terms];
+        this.phase = new double[terms];
+        this.periodicity = new int[terms];
+        for (int i = 0; i < terms; i++) {
+            this.periodicity[i] = i + 1;
         }
+        for (int i = 0; i < amplitude.length; i++) {
+            int j = periodicity[i] - 1;
+            if (j >= 0 && j < terms) {
+                this.amplitude[j] = amplitude[i];
+                this.phase[j] = phase[i];
+            }
+        }
+
         cosine = new double[terms];
         sine = new double[terms];
         for (int i = 0; i < terms; i++) {
             double angle = toRadians(this.phase[i]);
             cosine[i] = cos(angle);
             sine[i] = sin(angle);
+        }
+        torsionMode = TorsionMode.NORMAL;
+    }
+
+    /**
+     * TorsionType Constructor.
+     *
+     * @param atomClasses Atom classes.
+     * @param amplitude   Amplitudes of the Fourier series.
+     * @param phase       Phases of the Fourier series in degrees.
+     * @param periodicity Periodicity of the Fourier series.
+     */
+    public TorsionType(int[] atomClasses, double[] amplitude, double[] phase, int[] periodicity, TorsionMode torsionMode) {
+        this(atomClasses, amplitude, phase, periodicity);
+        if (torsionMode == TorsionMode.IMPROPER) {
+            this.torsionMode = torsionMode;
+            forceFieldType = ForceField.ForceFieldType.IMPROPER;
         }
     }
 
@@ -266,12 +295,32 @@ public final class TorsionType extends BaseType implements Comparator<String> {
      */
     @Override
     public String toString() {
-        StringBuilder torsionBuffer = new StringBuilder("torsion");
+        StringBuilder torsionBuffer;
+        if (torsionMode == TorsionMode.IMPROPER) {
+            torsionBuffer = new StringBuilder("improper");
+        } else {
+            torsionBuffer = new StringBuilder("torsion");
+        }
         for (int i : atomClasses) {
             torsionBuffer.append(format(" %5d", i));
         }
+
+        boolean nonZero = false;
+        for (double v : amplitude) {
+            if (v != 0.0) {
+                nonZero = true;
+            }
+        }
+
         for (int i = 0; i < amplitude.length; i++) {
-            torsionBuffer.append(format(" %7.3f %7.3f %1d", amplitude[i], phase[i], periodicity[i]));
+            if (amplitude[i] == 0.0 && (i > 0 || nonZero)) {
+                continue;
+            }
+            if (torsionMode == TorsionMode.NORMAL) {
+                torsionBuffer.append(format(" %7.3f %7.3f %1d", amplitude[i], phase[i], periodicity[i]));
+            } else {
+                torsionBuffer.append(format(" %7.3f %7.3f", amplitude[i], phase[i]));
+            }
         }
         return torsionBuffer.toString();
     }
