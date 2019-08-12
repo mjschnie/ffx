@@ -2979,7 +2979,6 @@ public class ForceFieldEnergy implements CrystalPotential, LambdaInterface {
         //rb.setLambdaStartEnd(lamStart, lamEnd);
 
         UnivariateSwitchingFunction switchingFunction;
-        UnivariateSwitchingFunction secondSwitchingFunction;
 
         switch (lamDependence) {
             case 0: // no lambda dependence
@@ -2996,20 +2995,8 @@ public class ForceFieldEnergy implements CrystalPotential, LambdaInterface {
                 }
                 break;
             case 2: // bell curve lambda dependence
-                double start;
-                if ((midpoint - 0.5) < 0.0) {
-                    start = 0.0;
-                } else {
-                    start = midpoint - 0.5;
-                }
-                double end = Math.min(midpoint + 0.5, 1.0);
-
-                switchingFunction = new MultiplicativeSwitch(start, midpoint);
-                secondSwitchingFunction = new MultiplicativeSwitch(midpoint, end);
-
-                rb.setSecondSwitchingFunction(secondSwitchingFunction);
-                logger.info(format(" Restraint Bond using switching functions %s and %s", switchingFunction, secondSwitchingFunction));
-
+                switchingFunction = new BellCurveSwitch(midpoint);
+                logger.info(format(" Restraint Bond using switching functions %s", switchingFunction));
                 break;
             default: // no lambda dependence
                 // merge this with 0 case?
@@ -3018,7 +3005,7 @@ public class ForceFieldEnergy implements CrystalPotential, LambdaInterface {
                 break;
         }
 
-        // Set switching function (first switching function in the case of bell curve lambda dependence)
+        // Set switching function
         rb.setSwitchingFunction(switchingFunction);
 
         // As long as we continue to add elements one-at-a-time to an array, this code will continue to be ugly.
