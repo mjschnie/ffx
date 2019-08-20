@@ -103,7 +103,7 @@ public class EnergyTest extends BaseFFXTest {
                         "DHFR Benchmark",
                         "ffx/potential/structures/dhfr.xyz",
                         23558,
-                        6624.21260754, 16569,
+                        6623.70878543, 16569,
                         4748.78155255, 11584,
                         -19.78973386, 4031,
                         -132.74781407, 7023,
@@ -148,12 +148,8 @@ public class EnergyTest extends BaseFFXTest {
                         0.0, 0,
                         20.45106694, 2290,
                         -169.03958434, 2485,
-                        // Double Loop polarization energy approach.
                         -11.76558725, 2485,
-                        -260.06559295, 2556, true},
-                        // Single loop polarization as -0.5 u.E
-                        // -22.60274971, 2485,
-                        // -249.22843049, 2556, true},
+                        -211.44726955, 2556, true},
                 {
                         "Amber99sb Peptide",
                         "ffx/potential/structures/peptide-amber99sb.xyz",
