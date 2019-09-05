@@ -2575,22 +2575,34 @@ public final class PDBFilter extends SystemFilter {
                      * Convert 1 and 2-character nucleic acid names to
                      * 3-character names.
                      */
-                    if (name.length() == 1) {
-                        if (name.equals("A")) {
+                    switch(name) {
+                        case "A":
                             name = NucleicAcid3.ADE.toString();
-                        } else if (name.equals("C")) {
+                            break;
+                        case "C":
                             name = NucleicAcid3.CYT.toString();
-                        } else if (name.equals("G")) {
+                            break;
+                        case "G":
                             name = NucleicAcid3.GUA.toString();
-                        } else if (name.equals("T")) {
+                            break;
+                        case "T":
                             name = NucleicAcid3.THY.toString();
-                        } else if (name.equals("U")) {
-                            name = NucleicAcid3.URI.toString();
-                        }
-                    } else if (name.length() == 2) {
-                        if (name.equals("YG")) {
+                            break;
+                        case "YG":
                             name = NucleicAcid3.YYG.toString();
-                        }
+                            break;
+                        case "DA":
+                            name = NucleicAcid3.DAD.toString();
+                            break;
+                        case "DC":
+                            name = NucleicAcid3.DCY.toString();
+                            break;
+                        case "DG":
+                            name = NucleicAcid3.DGU.toString();
+                            break;
+                        case "DT":
+                            name = NucleicAcid3.DTY.toString();
+                            break;
                     }
                     residue.setName(name);
                     NucleicAcid3 nucleicAcid = null;
