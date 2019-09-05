@@ -412,7 +412,16 @@ public class Angle extends BondedTerm {
                         break;
                     case IN_PLANE:
                         double[] a4 = new double[3];
-                        atom4.getXYZ(a4);
+                        try {
+                            atom4.getXYZ(a4);
+                        } catch (Exception e) {
+                            logger.info(" Atom 4 not found for angle: " + this.toString());
+                            for (Atom atom : atoms) {
+                                logger.info(" Atom: " + atom.toString());
+                                logger.info(" Type: " + atom.getAtomType().toString());
+                            }
+                            throw e;
+                        }
                         diff(a0, a4, v10);
                         diff(a1, a4, v20);
                         diff(a2, a4, v30);
