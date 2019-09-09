@@ -194,15 +194,31 @@ public class GaussVol {
     /**
      * Solvent pressure in kcal/mol/Ang^3.
      */
-    private double solventPressure = 0.0327;
+    //private double solventPressure = 0.0327;
+    private double solventPressure = 0.1266;
+    /**
+     * Volume offset in Ang^3
+     * Set based on comparison of FFX Volumes for small alkanes (methane-decane)
+     * to Tinker Solvent-Accessible Volumes (using H and a probe of 1.4 in Tinker)
+     */
+    private double volumeOffsetTinker = 22.085;
+    /**
+     * Surface Area offset in Ang^2
+     * Set based on comparison of FFX Surface Areas for small alkanes (methane-decane)
+     * to Tinker Solvent-Accessible Surface Areas (using H and a probe of 1.4 in Tinker)
+     */
+    private double surfaceAreaOffsetTinker = 42.208;
     /**
      * Surface tension in kcal/mol/Ang^2.
      */
-    private double surfaceTension = 0.08;
+    //private double surfaceTension = 0.08;
+    private double surfaceTension = 0.16;
     /**
      * Radius where volume dependence crosses over to surface area dependence (approximately at 1 nm).
+     * Originally 3.0*surfaceTension/solventPressure
+     * Reset to 7.339 to match Tinker
      */
-    private double crossOver = 3.0 * surfaceTension / solventPressure;
+    private double crossOver = 7.339;
     /**
      * Begin turning off the Volume term.
      */
@@ -474,7 +490,7 @@ public class GaussVol {
         }
 
         // Save the total molecular volume.
-        volume = totalVolume[0];
+        volume = totalVolume[0] + volumeOffsetTinker;
 
         // Calculate a purely volume based cavitation energy.
         volumeEnergy = volume * solventPressure;
@@ -486,6 +502,11 @@ public class GaussVol {
         // Load the offset radii and volumes.
         this.radii = radiiOffset;
         this.volumes = volumeOffset;
+
+        // Print Radii
+        for(int i = 0; i < radii.length; i++){
+            System.out.println("Cavitation radius: "+i+", "+radii[i]);
+        }
 
         // Run Volume calculation on radii that are slightly offset in order to do finite difference to get back surface area
         rescanTreeVolumes(positions);
@@ -507,7 +528,7 @@ public class GaussVol {
         }
 
         // Calculate the surface area.
-        surfaceArea = (selfVolumeOffsetSum - selfVolumeSum) / offset;
+        surfaceArea = ((selfVolumeOffsetSum - selfVolumeSum) / offset)+surfaceAreaOffsetTinker;
 
         // Calculate a purely surface area based cavitation energy.
         surfaceAreaEnergy = surfaceArea * surfaceTension;
