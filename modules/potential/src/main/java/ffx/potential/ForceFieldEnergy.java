@@ -50,24 +50,14 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-
-import static java.lang.Double.doubleToLongBits;
 import static java.lang.Double.isInfinite;
 import static java.lang.Double.isNaN;
 import static java.lang.String.format;
 import static java.util.Arrays.fill;
 import static java.util.Arrays.sort;
 
-import ffx.numerics.Constraint;
-import ffx.potential.constraint.CcmaConstraint;
-import ffx.numerics.switching.NoLambdaDependenceSwitch;
-import ffx.numerics.switching.PowerSwitch;
-import ffx.numerics.switching.UnivariateSwitchingFunction;
-import ffx.potential.constraint.SettleConstraint;
-import ffx.potential.nonbonded.*;
 import org.apache.commons.configuration2.CompositeConfiguration;
 import org.apache.commons.io.FilenameUtils;
-
 import static org.apache.commons.math3.util.FastMath.max;
 import static org.apache.commons.math3.util.FastMath.sqrt;
 
@@ -83,8 +73,13 @@ import ffx.crystal.NCSCrystal;
 import ffx.crystal.ReplicatesCrystal;
 import ffx.crystal.SpaceGroup;
 import ffx.crystal.SymOp;
+import ffx.numerics.Constraint;
 import ffx.numerics.atomic.AtomicDoubleArray.AtomicDoubleArrayImpl;
 import ffx.numerics.atomic.AtomicDoubleArray3D;
+import ffx.numerics.switching.BellCurveSwitch;
+import ffx.numerics.switching.ConstantSwitch;
+import ffx.numerics.switching.PowerSwitch;
+import ffx.numerics.switching.UnivariateSwitchingFunction;
 import ffx.potential.bonded.Angle;
 import ffx.potential.bonded.AngleTorsion;
 import ffx.potential.bonded.Atom;
@@ -107,6 +102,8 @@ import ffx.potential.bonded.StretchTorsion;
 import ffx.potential.bonded.Torsion;
 import ffx.potential.bonded.TorsionTorsion;
 import ffx.potential.bonded.UreyBradley;
+import ffx.potential.constraint.CcmaConstraint;
+import ffx.potential.constraint.SettleConstraint;
 import ffx.potential.extended.ExtendedSystem;
 import ffx.potential.nonbonded.COMRestraint;
 import ffx.potential.nonbonded.CoordRestraint;
@@ -125,7 +122,6 @@ import ffx.potential.parameters.ForceField.ForceFieldString;
 import ffx.potential.utils.EnergyException;
 import ffx.potential.utils.PotentialsFunctions;
 import ffx.potential.utils.PotentialsUtils;
-
 import static ffx.potential.parameters.ForceField.toEnumForm;
 
 /**
@@ -2525,6 +2521,7 @@ public class ForceFieldEnergy implements CrystalPotential, LambdaInterface {
 
     /**
      * Applies constraints to positions
+     *
      * @param xPrior
      * @param xNew
      */
@@ -3027,12 +3024,13 @@ public class ForceFieldEnergy implements CrystalPotential, LambdaInterface {
 
         switch (lamDependence) {
             case 0: // no lambda dependence
-                switchingFunction = new NoLambdaDependenceSwitch();
+            default:
+                switchingFunction = new ConstantSwitch();
                 logger.info(format(" Restraint Bond using switching function %s", switchingFunction));
                 break;
             case 1: // cubic lambda dependence
                 if (lambda < lamStart) {
-                    switchingFunction = new NoLambdaDependenceSwitch();
+                    switchingFunction = new ConstantSwitch();
                     logger.info(format(" Restraint Bond using switching function %s", switchingFunction));
                 } else {
                     switchingFunction = new PowerSwitch(1, 3);
@@ -3042,11 +3040,6 @@ public class ForceFieldEnergy implements CrystalPotential, LambdaInterface {
             case 2: // bell curve lambda dependence
                 switchingFunction = new BellCurveSwitch(midpoint);
                 logger.info(format(" Restraint Bond using switching functions %s", switchingFunction));
-                break;
-            default: // no lambda dependence
-                // merge this with 0 case?
-                switchingFunction = new NoLambdaDependenceSwitch();
-                logger.info(format(" Restraint Bond using switching function %s", switchingFunction));
                 break;
         }
 

@@ -41,11 +41,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Logger;
 
-import ffx.numerics.switching.NoLambdaDependenceSwitch;
-import ffx.numerics.switching.PowerSwitch;
-import ffx.numerics.switching.UnivariateSwitchingFunction;
-import ffx.potential.nonbonded.MultiplicativeSwitch;
-import org.graalvm.compiler.core.common.type.ArithmeticOpTable;
 import org.jogamp.java3d.BranchGroup;
 import org.jogamp.java3d.Geometry;
 import org.jogamp.java3d.LineArray;
@@ -55,14 +50,11 @@ import org.jogamp.java3d.TransformGroup;
 import org.jogamp.vecmath.AxisAngle4d;
 import org.jogamp.vecmath.Vector3d;
 
-import static java.lang.String.format;
-import static org.apache.commons.math3.util.FastMath.pow;
-
 import ffx.crystal.Crystal;
 import ffx.numerics.atomic.AtomicDoubleArray3D;
+import ffx.numerics.switching.UnivariateSwitchingFunction;
 import ffx.potential.bonded.RendererCache.ViewModel;
 import ffx.potential.parameters.BondType;
-
 import static ffx.numerics.math.VectorMath.angle;
 import static ffx.numerics.math.VectorMath.cross;
 import static ffx.numerics.math.VectorMath.diff;
@@ -99,11 +91,13 @@ public class RestraintBond extends BondedTerm implements LambdaInterface {
     private double[][] dEdXdL = new double[2][3];
     private int lamDependence = 0; // defaults to no lambda dependence
     private double midpoint = 0.5;
+
     /**
      * Sets switching function based on user-defined lambda dependence
+     *
      * @param switchingFunction Univariate switching function, based on lambda dependence
      */
-    public void setSwitchingFunction(UnivariateSwitchingFunction switchingFunction){
+    public void setSwitchingFunction(UnivariateSwitchingFunction switchingFunction) {
         this.switchingFunction = switchingFunction;
     }
 
@@ -692,11 +686,40 @@ public class RestraintBond extends BondedTerm implements LambdaInterface {
         double dv2 = dv * dv;
         double kx2 = units * bondType.forceConstant * dv2 * esvLambda;
 
+        // Note -- the application of the code below with the switchingFunction has a bug that
+        // causes a test from Jacob's thesis to fail.
+
+        /**
+        // Compute energy and derivatives with respect to lambda.
         energy = switchingFunction.valueAt(lambda) * kx2;
         dEdL = switchingFunction.firstDerivative(lambda) * kx2;
         d2EdL2 = switchingFunction.secondDerivative(lambda) * kx2;
-
         // Probably magnitude of the force vector
+        double deddt = 2.0 * units * bondType.forceConstant * dv * esvLambda;
+        double de = 0.0;
+        if (value > 0.0) {
+            de = deddt / value;
+        }
+        scalar(v10, switchingFunction.valueAt(lambda) * de, g0);
+        scalar(v10, -switchingFunction.valueAt(lambda) * de, g1);
+        if (gradient) {
+            grad.add(threadID, atoms[0].getIndex() - 1, g0[0], g0[1], g0[2]);
+            grad.add(threadID, atoms[1].getIndex() - 1, g1[0], g1[1], g1[2]);
+        }
+        // Remove the factor of rL3
+        scalar(v10, switchingFunction.firstDerivative(lambda) * de, g0);
+        scalar(v10, -switchingFunction.firstDerivative(lambda) * de, g1);
+        dEdXdL[0][0] = g0[0];
+        dEdXdL[0][1] = g0[1];
+        dEdXdL[0][2] = g0[2];
+        dEdXdL[1][0] = g1[0];
+        dEdXdL[1][1] = g1[1];
+        dEdXdL[1][2] = g1[2];
+         */
+
+        energy = rL3 * kx2;
+        dEdL = rL2 * kx2;
+        d2EdL2 = rL1 * kx2;
         double deddt = 2.0 * units * bondType.forceConstant * dv * esvLambda;
         double de = 0.0;
 
@@ -704,18 +727,16 @@ public class RestraintBond extends BondedTerm implements LambdaInterface {
             de = deddt / value;
         }
 
-        scalar(v10, switchingFunction.valueAt(lambda) * de, g0);
-        scalar(v10, -switchingFunction.valueAt(lambda) * de, g1);
-
+        scalar(v10, rL3 * de, g0);
+        scalar(v10, -rL3 * de, g1);
         if (gradient) {
             grad.add(threadID, atoms[0].getIndex() - 1, g0[0], g0[1], g0[2]);
             grad.add(threadID, atoms[1].getIndex() - 1, g1[0], g1[1], g1[2]);
         }
 
         // Remove the factor of rL3
-        scalar(v10, switchingFunction.firstDerivative(lambda) * de, g0);
-        scalar(v10, -switchingFunction.firstDerivative(lambda) * de, g1);
-
+        scalar(v10, rL2 * de, g0);
+        scalar(v10, -rL2 * de, g1);
         dEdXdL[0][0] = g0[0];
         dEdXdL[0][1] = g0[1];
         dEdXdL[0][2] = g0[2];

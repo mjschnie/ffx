@@ -50,6 +50,7 @@ import static org.apache.commons.math3.util.FastMath.exp;
 import static org.apache.commons.math3.util.FastMath.pow;
 import static org.apache.commons.math3.util.FastMath.sqrt;
 
+import ffx.numerics.switching.MultiplicativeSwitch;
 import static ffx.numerics.math.VectorMath.diff;
 import static ffx.numerics.math.VectorMath.rsq;
 import static ffx.numerics.math.VectorMath.scalar;
@@ -99,6 +100,12 @@ public class GaussVol {
      */
     private static double KFC = 2.2269859253;
     private static double PFC = 2.5;
+
+    /**
+     * Set this to either KFC or PFC.
+     */
+    private static double sphereConversion = KFC;
+
     /**
      * Minimum volume.
      */
@@ -507,8 +514,8 @@ public class GaussVol {
         this.volumes = volumeOffset;
 
         // Print Radii
-        for(int i = 0; i < radii.length; i++){
-            System.out.println("Cavitation radius: "+i+", "+radii[i]);
+        for (int i = 0; i < radii.length; i++) {
+            System.out.println("Cavitation radius: " + i + ", " + radii[i]);
         }
 
         // Print Crossover Point and Solvent Pressure Values
@@ -535,7 +542,7 @@ public class GaussVol {
         }
 
         // Calculate the surface area.
-        surfaceArea = ((selfVolumeOffsetSum - selfVolumeSum) / offset)+surfaceAreaOffsetTinker;
+        surfaceArea = ((selfVolumeOffsetSum - selfVolumeSum) / offset) + surfaceAreaOffsetTinker;
 
         // Calculate a purely surface area based cavitation energy.
         surfaceAreaEnergy = surfaceArea * surfaceTension;
@@ -854,7 +861,7 @@ public class GaussVol {
             // list of atoms start at slot #1
             for (int iat = 0; iat < nAtoms; iat++) {
                 overlap = new GaussianOverlap();
-                double a = KFC / (radii[iat] * radii[iat]);
+                double a = sphereConversion / (radii[iat] * radii[iat]);
                 double vol = ishydrogen[iat] ? 0 : volumes[iat];
                 overlap.level = 1;
                 overlap.g.v = vol;
@@ -1306,7 +1313,7 @@ public class GaussVol {
 
             slot = 1;
             for (int iat = 0; iat < nAtoms; iat++, slot++) {
-                double a = KFC / (radii[iat] * radii[iat]);
+                double a = sphereConversion / (radii[iat] * radii[iat]);
                 double vol = ishydrogen[iat] ? 0. : volumes[iat];
                 ov = overlaps.get(slot);
                 ov.level = 1;
