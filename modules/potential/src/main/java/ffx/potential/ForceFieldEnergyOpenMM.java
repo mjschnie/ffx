@@ -1991,6 +1991,10 @@ public class ForceFieldEnergyOpenMM extends ForceFieldEnergy {
                     }
                     openMMContext.setParameter("vdw_lambda", lambdaVDW);
                 } else if (amoebaVDWForce != null) {
+                    if (!softcoreCreated) {
+                        updateAmoebaVDWForce(atoms);
+                        softcoreCreated = true;
+                    }
                     openMMContext.setParameter("AmoebaVdwLambda", lambdaVDW);
                 }
 
