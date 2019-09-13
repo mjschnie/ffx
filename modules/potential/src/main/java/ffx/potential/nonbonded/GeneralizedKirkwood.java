@@ -106,16 +106,21 @@ public class GeneralizedKirkwood implements LambdaInterface {
     private static final double DEFAULT_CAV_SURFACE_TENSION = 0.0049;
     /**
      * Default surface tension for apolar models with an explicit dispersion term.
+     *
+     * Experimental value: 0.103 kcal/mol/Ang^2
+     *
+     * Originally set to 0.08 kcal/mol/Ang^2 since there will always be a slight curve in water
+     * with a solute (ie: water will never be perfectly flat like it would be
+     * during surface tension experiments with pure water)
      */
-    private static final double DEFAULT_CAVDISP_SURFACE_TENSION = 0.08;
+    private static final double DEFAULT_CAVDISP_SURFACE_TENSION = 0.103;
     /**
      * Default solvent pressure for apolar models with an explicit volume term.
      *
      * Original value of 0.0327 kcal/mol/A^3 is based on using rigorous solvent
      * accessible volumes.
      *
-     * For use with GaussVol volumes (i.e. a vdW volume),
-     * a larger solvent pressure of 0.1266 is needed.
+     * For use with GaussVol volumes (i.e. a vdW volume), a larger solvent pressure of 0.1266 is needed.
      */
     private static final double DEFAULT_SOLVENT_PRESSURE = 0.1266;
 
@@ -515,9 +520,26 @@ public class GeneralizedKirkwood implements LambdaInterface {
 
                 probe = forceField.getDouble(ForceField.ForceFieldDouble.PROBE_RADIUS, DEFAULT_GAUSSVOL_PROBE);
                 int index = 0;
+                double hydrogenFactor = 0.035;
+                int nCarbons = 0;
+
+                // Count number of carbons
+                for(Atom atom : atoms){
+                    if(atom.getAtomicNumber() == 12){
+                        nCarbons += 1;
+                    }
+                }
+
                 for (Atom atom : atoms) {
                     isHydrogen[index] = atom.isHydrogen();
                     radii[index] = atom.getVDWType().radius / 2.0 * rminToSigma;
+                    if (atom.getNumberOfBondedHydrogen() == 3){
+                        hydrogenFactor = 0.036 - (0.001 * nCarbons);
+                    } else if(atom.getNumberOfBondedHydrogen() <= 2){
+                        hydrogenFactor = 0.00;
+                    }
+                    //System.out.println("Hydrogen Factor: "+hydrogenFactor);
+                    //radii[index] += probe + hydrogenFactor * atom.getNumberOfBondedHydrogen();
                     radii[index] += probe;
                     volume[index] = fourThirdsPI * pow(radii[index], 3);
                     gamma[index] = 1.0;

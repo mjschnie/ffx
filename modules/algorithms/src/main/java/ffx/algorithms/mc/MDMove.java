@@ -188,6 +188,10 @@ public class MDMove implements MCMove {
                     normalizedEnergyDriftNet, normalizedEnergyDriftAbs));
         }
     }
+    
+    public void setMDIntervalSteps(int intervalSteps){
+        molecularDynamics.setIntervalSteps(intervalSteps);
+    }
 
     /**
      * <p>getStartingKineticEnergy.</p>

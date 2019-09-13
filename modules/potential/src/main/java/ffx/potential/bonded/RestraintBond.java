@@ -49,10 +49,10 @@ import org.jogamp.java3d.Transform3D;
 import org.jogamp.java3d.TransformGroup;
 import org.jogamp.vecmath.AxisAngle4d;
 import org.jogamp.vecmath.Vector3d;
-import static org.apache.commons.math3.util.FastMath.pow;
 
 import ffx.crystal.Crystal;
 import ffx.numerics.atomic.AtomicDoubleArray3D;
+import ffx.numerics.switching.UnivariateSwitchingFunction;
 import ffx.potential.bonded.RendererCache.ViewModel;
 import ffx.potential.parameters.BondType;
 import static ffx.numerics.math.VectorMath.angle;
@@ -85,9 +85,42 @@ public class RestraintBond extends BondedTerm implements LambdaInterface {
     private double restraintLambdaStart = 0.75;
     private final double restraintLambdaStop = 1.00;
     private double restraintLambdaWindow = (restraintLambdaStop - restraintLambdaStart);
+    private UnivariateSwitchingFunction switchingFunction;
     private double dEdL = 0.0;
     private double d2EdL2 = 0.0;
     private double[][] dEdXdL = new double[2][3];
+    private int lamDependence = 0; // defaults to no lambda dependence
+    private double midpoint = 0.5;
+
+    /**
+     * Sets switching function based on user-defined lambda dependence
+     *
+     * @param switchingFunction Univariate switching function, based on lambda dependence
+     */
+    public void setSwitchingFunction(UnivariateSwitchingFunction switchingFunction) {
+        this.switchingFunction = switchingFunction;
+    }
+
+    /**
+     * Sets lambda dependence based on user input
+     * 0: no lambda dependence
+     * 1: cubic lambda dependence
+     * 2: bell curve lambda dependence
+     *
+     * @param lamDependence Integer to describe lambda dependence
+     */
+    public void setLamDependence(int lamDependence) {
+        this.lamDependence = lamDependence;
+    }
+
+    /**
+     * Sets midpoint of lambda bell curve dependence
+     *
+     * @param midpoint Midpoint of bell curve
+     */
+    public void setMidpoint(double midpoint) {
+        this.midpoint = midpoint;
+    }
 
     /**
      * {@inheritDoc}
@@ -95,19 +128,6 @@ public class RestraintBond extends BondedTerm implements LambdaInterface {
     @Override
     public void setLambda(double lambda) {
         this.lambda = lambda;
-
-        if (lambda < restraintLambdaStart) {
-            restraintLambda = 1.0;
-            rL3 = 1.0;
-            rL2 = 0.0;
-            rL1 = 0.0;
-        } else {
-            restraintLambda = 1.0 - (lambda - restraintLambdaStart) / restraintLambdaWindow;
-            rL3 = pow(restraintLambda, 3.0);
-            rL2 = -3.0 * pow(restraintLambda, 2.0) / restraintLambdaWindow;
-            rL1 = 6.0 * restraintLambda / (restraintLambdaWindow * restraintLambdaWindow);
-        }
-
     }
 
     /**
@@ -652,8 +672,9 @@ public class RestraintBond extends BondedTerm implements LambdaInterface {
             crystal.image(v10);
         }
 
+        // value is the magnitude of the separation vector
         value = r(v10);
-        double dv = value - bondType.distance;
+        double dv = value - bondType.distance; // bondType.distance = ideal bond length
         if (bondType.bondFunction.hasFlatBottom()) {
             if (dv > 0) {
                 dv = Math.max(0, dv - bondType.flatBottomRadius);
@@ -664,6 +685,38 @@ public class RestraintBond extends BondedTerm implements LambdaInterface {
 
         double dv2 = dv * dv;
         double kx2 = units * bondType.forceConstant * dv2 * esvLambda;
+
+        // Note -- the application of the code below with the switchingFunction has a bug that
+        // causes a test from Jacob's thesis to fail.
+
+        /**
+        // Compute energy and derivatives with respect to lambda.
+        energy = switchingFunction.valueAt(lambda) * kx2;
+        dEdL = switchingFunction.firstDerivative(lambda) * kx2;
+        d2EdL2 = switchingFunction.secondDerivative(lambda) * kx2;
+        // Probably magnitude of the force vector
+        double deddt = 2.0 * units * bondType.forceConstant * dv * esvLambda;
+        double de = 0.0;
+        if (value > 0.0) {
+            de = deddt / value;
+        }
+        scalar(v10, switchingFunction.valueAt(lambda) * de, g0);
+        scalar(v10, -switchingFunction.valueAt(lambda) * de, g1);
+        if (gradient) {
+            grad.add(threadID, atoms[0].getIndex() - 1, g0[0], g0[1], g0[2]);
+            grad.add(threadID, atoms[1].getIndex() - 1, g1[0], g1[1], g1[2]);
+        }
+        // Remove the factor of rL3
+        scalar(v10, switchingFunction.firstDerivative(lambda) * de, g0);
+        scalar(v10, -switchingFunction.firstDerivative(lambda) * de, g1);
+        dEdXdL[0][0] = g0[0];
+        dEdXdL[0][1] = g0[1];
+        dEdXdL[0][2] = g0[2];
+        dEdXdL[1][0] = g1[0];
+        dEdXdL[1][1] = g1[1];
+        dEdXdL[1][2] = g1[2];
+         */
+
         energy = rL3 * kx2;
         dEdL = rL2 * kx2;
         d2EdL2 = rL1 * kx2;

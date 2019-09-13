@@ -35,54 +35,97 @@
 // exception statement from your version.
 //
 //******************************************************************************
-package ffx.potential.cli;
-
-import ffx.potential.ForceFieldEnergy;
-import ffx.potential.MolecularAssembly;
-import picocli.CommandLine.Option;
+package ffx.numerics.switching;
 
 /**
- * Represents command line options for scripts that save a structure to disc.
+ * The ConstantSwitch returns 1 for all input values x. This is useful for
+ * having a single code path that accomodates both "real" switching behavior and no
+ * switching behavior.
  *
- * @author Michael J. Schnieders
- * @author Jacob M. Litman
- * @since 1.0
+ *  @author Jacob M. Litman
+ *  @author Michael J. Schnieders
  */
-public class SaveOptions {
-    /**
-     * -c or --constrain is a flag to print out energy at each step.
-     */
-    @Option(names = {"-c", "--constrain"}, paramLabel = "false", description = "Apply geometric constraints before saving.")
-    private boolean constrain = false;
+public class ConstantSwitch implements UnivariateSwitchingFunction {
 
-    private double[] x;
-    private double[] outputX;
+    // TODO: check on returns for getZeroBound and getOneBound
 
     /**
-     * Performs key operations prior to saving to disc, such as application of geometric constraints.
-     *
-     * @param mola A MolecularAssembly.
+     * {@inheritDoc}
      */
-    public void preSaveOperations(MolecularAssembly mola) {
-        preSaveOperations(mola.getPotentialEnergy());
+    @Override
+    public double getZeroBound() {
+        return 0;
     }
 
     /**
-     * Performs key operations prior to saving to disc, such as application of geometric constraints.
-     *
-     * @param ffe A ForceFieldEnergy.
+     * {@inheritDoc}
      */
-    public void preSaveOperations(ForceFieldEnergy ffe) {
-        if (constrain) {
-            int nVars = ffe.getNumberOfVariables();
-            if (x == null) {
-                x = new double[nVars];
-                outputX = new double[nVars];
-            }
-            x = ffe.getCoordinates(x);
-            System.arraycopy(x, 0, outputX, 0, nVars);
-            ffe.applyAllConstraintPositions(x, outputX);
-            ffe.setCoordinates(outputX);
-        }
+    @Override
+    public double getOneBound() {
+        return 1;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public boolean constantOutsideBounds() {
+        return false;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public boolean validOutsideBounds() {
+        return false;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public int getHighestOrderZeroDerivative() {
+        return 1;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public boolean symmetricToUnity() {
+        return true;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public double valueAt(double x) throws IllegalArgumentException {
+        return 1.0;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public double firstDerivative(double x) {
+        return 0.0;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public double secondDerivative(double x) {
+        return 0.0;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public double nthDerivative(double x, int order) throws IllegalArgumentException {
+        return 0.0;
     }
 }
