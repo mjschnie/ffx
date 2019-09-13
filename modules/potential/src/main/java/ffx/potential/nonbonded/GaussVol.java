@@ -124,6 +124,7 @@ public class GaussVol {
     private static double ANG3 = 1.0;
     private static double VOLMINA = 0.01 * ANG3;
     private static double VOLMINB = 0.1 * ANG3;
+    private static String CROSSOVER = "4.49";
 
     /**
      * Number of atoms.
@@ -195,19 +196,21 @@ public class GaussVol {
      * Solvent pressure in kcal/mol/Ang^3.
      */
     //private double solventPressure = 0.0327;
-    private double solventPressure = 0.1266;
+    private double solventPressure = 0.11337;
     /**
      * Volume offset in Ang^3
      * Set based on comparison of FFX Volumes for small alkanes (methane-decane)
      * to Tinker Solvent-Accessible Volumes (using H and a probe of 1.4 in Tinker)
      */
-    private double volumeOffsetTinker = 22.085;
+    //private double volumeOffsetTinker = 22.085;
+    private double volumeOffsetTinker = 27.939;
     /**
      * Surface Area offset in Ang^2
      * Set based on comparison of FFX Surface Areas for small alkanes (methane-decane)
      * to Tinker Solvent-Accessible Surface Areas (using H and a probe of 1.4 in Tinker)
      */
-    private double surfaceAreaOffsetTinker = 42.208;
+    //private double surfaceAreaOffsetTinker = 42.208;
+    private double surfaceAreaOffsetTinker = 46.111;
     /**
      * Surface tension in kcal/mol/Ang^2.
      */
@@ -218,7 +221,7 @@ public class GaussVol {
      * Originally 3.0*surfaceTension/solventPressure
      * Reset to 7.339 to match Tinker
      */
-    private double crossOver = 7.339;
+    private double crossOver = Double.parseDouble(System.getProperty("crossover",CROSSOVER));
     /**
      * Begin turning off the Volume term.
      */
@@ -507,6 +510,10 @@ public class GaussVol {
         for(int i = 0; i < radii.length; i++){
             System.out.println("Cavitation radius: "+i+", "+radii[i]);
         }
+
+        // Print Crossover Point and Solvent Pressure Values
+        System.out.println("\nCrossover Point: "+crossOver);
+        System.out.println("Solvent Pressure: "+solventPressure+"\n");
 
         // Run Volume calculation on radii that are slightly offset in order to do finite difference to get back surface area
         rescanTreeVolumes(positions);
