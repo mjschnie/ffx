@@ -1993,6 +1993,11 @@ public class ForceFieldEnergyOpenMM extends ForceFieldEnergy {
                 } else if (amoebaVDWForce != null) {
                     openMMContext.setParameter("AmoebaVdwLambda", lambdaVDW);
                 }
+
+                // Avoid any updateParametersInContext calls if vdwLambdaTerm is true, but not other alchemical terms.
+                if (!torsionLambdaTerm && !elecLambdaTerm) {
+                    return;
+                }
             }
 
             if (torsionLambdaTerm) {
