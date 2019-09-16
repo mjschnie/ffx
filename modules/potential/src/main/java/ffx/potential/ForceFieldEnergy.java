@@ -2992,7 +2992,8 @@ public class ForceFieldEnergy implements CrystalPotential, LambdaInterface {
      */
     private void setRestraintBond(Atom a1, Atom a2, double distance, double forceConstant, double flatBottom, UnivariateSwitchingFunction switchingFunction) {
         restraintBondTerm = true;
-        RestraintBond rb = new RestraintBond(a1, a2, crystal, lambdaTerm, switchingFunction);
+        boolean rbLambda = !(switchingFunction instanceof ConstantSwitch) && lambdaTerm;
+        RestraintBond rb = new RestraintBond(a1, a2, crystal, rbLambda, switchingFunction);
         int[] classes = {a1.getAtomType().atomClass, a2.getAtomType().atomClass};
         if (flatBottom != 0) {
             rb.setBondType(new BondType(classes, forceConstant, distance, BondType.BondFunction.FLAT_BOTTOM_HARMONIC, flatBottom));
