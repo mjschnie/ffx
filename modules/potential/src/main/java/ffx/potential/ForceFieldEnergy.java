@@ -76,10 +76,7 @@ import ffx.crystal.SymOp;
 import ffx.numerics.Constraint;
 import ffx.numerics.atomic.AtomicDoubleArray.AtomicDoubleArrayImpl;
 import ffx.numerics.atomic.AtomicDoubleArray3D;
-import ffx.numerics.switching.BellCurveSwitch;
-import ffx.numerics.switching.ConstantSwitch;
-import ffx.numerics.switching.PowerSwitch;
-import ffx.numerics.switching.UnivariateSwitchingFunction;
+import ffx.numerics.switching.*;
 import ffx.potential.bonded.Angle;
 import ffx.potential.bonded.AngleTorsion;
 import ffx.potential.bonded.Atom;
@@ -1267,8 +1264,11 @@ public class ForceFieldEnergy implements CrystalPotential, LambdaInterface {
                     forceConst = Double.parseDouble(toks[2]);
                 }
                 double dist;
-                int lamDependence = 0;
                 switch (toks.length) {
+                    case 0:
+                    case 1:
+                        throw new IllegalArgumentException(format(" restrain-distance value %s could not be parsed!", bondRest));
+                    case 2:
                     case 3:
                         double[] xyz1 = new double[3];
                         xyz1 = a1.getXYZ(xyz1);
@@ -1281,34 +1281,22 @@ public class ForceFieldEnergy implements CrystalPotential, LambdaInterface {
                         dist = Double.parseDouble(toks[3]);
                         break;
                     case 5:
+                    default:
                         double minDist = Double.parseDouble(toks[3]);
                         double maxDist = Double.parseDouble(toks[4]);
                         dist = 0.5 * (minDist + maxDist);
                         flatBottomRadius = 0.5 * Math.abs(maxDist - minDist);
-                        lamDependence = 0;
                         break;
-                    case 6: // lambda dependence: bell
-                        minDist = Double.parseDouble(toks[3]);
-                        maxDist = Double.parseDouble(toks[4]);
-                        dist = 0.5 * (minDist + maxDist);
-                        flatBottomRadius = 0.5 * Math.abs(maxDist - minDist);
-                        midpoint = Double.parseDouble(toks[5]);
-                        lamDependence = 1;
-                        break;
-                    case 7: // lambda dependence: cubic
-                        minDist = Double.parseDouble(toks[3]);
-                        maxDist = Double.parseDouble(toks[4]);
-                        dist = 0.5 * (minDist + maxDist);
-                        flatBottomRadius = 0.5 * Math.abs(maxDist - minDist);
-                        lamStart = Double.parseDouble(toks[5]);
-                        lamEnd = Double.parseDouble(toks[6]);
-                        lamDependence = 2;
-                        break;
-                    default:
-                        throw new IllegalArgumentException(format(" restrain-distance value %s could not be parsed!", bondRest));
                 }
 
-                setRestraintBond(a1, a2, dist, forceConst, flatBottomRadius, lamDependence);
+                UnivariateSwitchingFunction switchF;
+                if (toks.length > 5) {
+                    switchF = UnivariateFunctionFactory.parseUSF(toks, 5);
+                } else {
+                    switchF = new ConstantSwitch();
+                }
+
+                setRestraintBond(a1, a2, dist, forceConst, flatBottomRadius, switchF);
             } catch (Exception ex) {
                 logger.info(format(" Exception in parsing restrain-distance: %s", ex.toString()));
             }
@@ -2974,7 +2962,7 @@ public class ForceFieldEnergy implements CrystalPotential, LambdaInterface {
      * @param forceConstant the force constant in kcal/mole
      */
     public void setRestraintBond(Atom a1, Atom a2, double distance, double forceConstant) {
-        setRestraintBond(a1, a2, distance, forceConstant, 0, 0);
+        setRestraintBond(a1, a2, distance, forceConstant, 0);
     }
 
     /**
@@ -2988,7 +2976,7 @@ public class ForceFieldEnergy implements CrystalPotential, LambdaInterface {
      * @param flatBottom    Radius of a flat-bottom potential in Angstroms.
      */
     public void setRestraintBond(Atom a1, Atom a2, double distance, double forceConstant, double flatBottom) {
-        setRestraintBond(a1, a2, distance, forceConstant, flatBottom, 0);
+        setRestraintBond(a1, a2, distance, forceConstant, flatBottom, new ConstantSwitch());
     }
 
     /**
@@ -3000,51 +2988,17 @@ public class ForceFieldEnergy implements CrystalPotential, LambdaInterface {
      * @param distance      a double.
      * @param forceConstant the force constant in kcal/mole.
      * @param flatBottom    Radius of a flat-bottom potential in Angstroms.
-     * @param lamDependence Lambda dependence
-     *                      0: no dependence on lambda
-     *                      1: cubic dependence on lambda
-     *                      2: bell curve dependence on lambda
+     * @param switchingFunction Switching function to use as a lambda dependence.
      */
-    private void setRestraintBond(Atom a1, Atom a2, double distance, double forceConstant, double flatBottom, int lamDependence) {
+    private void setRestraintBond(Atom a1, Atom a2, double distance, double forceConstant, double flatBottom, UnivariateSwitchingFunction switchingFunction) {
         restraintBondTerm = true;
-        RestraintBond rb = new RestraintBond(a1, a2, crystal);
+        RestraintBond rb = new RestraintBond(a1, a2, crystal, lambdaTerm, switchingFunction);
         int[] classes = {a1.getAtomType().atomClass, a2.getAtomType().atomClass};
         if (flatBottom != 0) {
             rb.setBondType(new BondType(classes, forceConstant, distance, BondType.BondFunction.FLAT_BOTTOM_HARMONIC, flatBottom));
         } else {
             rb.setBondType((new BondType(classes, forceConstant, distance, BondType.BondFunction.HARMONIC)));
         }
-
-        // Set lambda dependence variables
-        rb.setLamDependence(lamDependence);
-        rb.setMidpoint(midpoint);
-        //rb.setLambdaStartEnd(lamStart, lamEnd);
-
-        UnivariateSwitchingFunction switchingFunction;
-
-        switch (lamDependence) {
-            case 0: // no lambda dependence
-            default:
-                switchingFunction = new ConstantSwitch();
-                logger.info(format(" Restraint Bond using switching function %s", switchingFunction));
-                break;
-            case 1: // cubic lambda dependence
-                if (lambda < lamStart) {
-                    switchingFunction = new ConstantSwitch();
-                    logger.info(format(" Restraint Bond using switching function %s", switchingFunction));
-                } else {
-                    switchingFunction = new PowerSwitch(1, 3);
-                    logger.info(format(" Restraint Bond using switching function %s", switchingFunction));
-                }
-                break;
-            case 2: // bell curve lambda dependence
-                switchingFunction = new BellCurveSwitch(midpoint);
-                logger.info(format(" Restraint Bond using switching functions %s", switchingFunction));
-                break;
-        }
-
-        // Set switching function
-        rb.setSwitchingFunction(switchingFunction);
 
         // As long as we continue to add elements one-at-a-time to an array, this code will continue to be ugly.
         RestraintBond[] newRbs = new RestraintBond[++nRestraintBonds];

@@ -87,7 +87,7 @@ public class BellCurveSwitch implements UnivariateSwitchingFunction {
      */
     @Override
     public boolean constantOutsideBounds() {
-        return false;
+        return switchingFunction.constantOutsideBounds() && secondSwitchingFunction.constantOutsideBounds();
     }
 
     /**
@@ -95,7 +95,7 @@ public class BellCurveSwitch implements UnivariateSwitchingFunction {
      */
     @Override
     public boolean validOutsideBounds() {
-        return false;
+        return switchingFunction.validOutsideBounds() && secondSwitchingFunction.validOutsideBounds();
     }
 
     /**
@@ -103,7 +103,7 @@ public class BellCurveSwitch implements UnivariateSwitchingFunction {
      */
     @Override
     public int getHighestOrderZeroDerivative() {
-        return 2;
+        return Math.min(switchingFunction.getHighestOrderZeroDerivative(), secondSwitchingFunction.getHighestOrderZeroDerivative());
     }
 
     /**
@@ -111,7 +111,7 @@ public class BellCurveSwitch implements UnivariateSwitchingFunction {
      */
     @Override
     public boolean symmetricToUnity() {
-        return true;
+        return switchingFunction.symmetricToUnity() && secondSwitchingFunction.symmetricToUnity();
     }
 
     /**

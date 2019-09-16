@@ -52,6 +52,7 @@ import org.jogamp.vecmath.Vector3d;
 
 import ffx.crystal.Crystal;
 import ffx.numerics.atomic.AtomicDoubleArray3D;
+import ffx.numerics.switching.ConstantSwitch;
 import ffx.numerics.switching.UnivariateSwitchingFunction;
 import ffx.potential.bonded.RendererCache.ViewModel;
 import ffx.potential.parameters.BondType;
@@ -77,50 +78,19 @@ public class RestraintBond extends BondedTerm implements LambdaInterface {
 
     private static final Logger logger = Logger.getLogger(RestraintBond.class.getName());
 
+    private boolean lambdaTerm = false;
     private double lambda = 1.0;
     private double restraintLambda = 1.0;
-    private double rL3 = 1.0;
-    private double rL2 = 1.0;
-    private double rL1 = 1.0;
+    private double switchVal = 1.0;
+    private double switchdUdL = 1.0;
+    private double switchd2UdL2 = 1.0;
     private double restraintLambdaStart = 0.75;
     private final double restraintLambdaStop = 1.00;
     private double restraintLambdaWindow = (restraintLambdaStop - restraintLambdaStart);
-    private UnivariateSwitchingFunction switchingFunction;
+    private final UnivariateSwitchingFunction switchingFunction;
     private double dEdL = 0.0;
     private double d2EdL2 = 0.0;
     private double[][] dEdXdL = new double[2][3];
-    private int lamDependence = 0; // defaults to no lambda dependence
-    private double midpoint = 0.5;
-
-    /**
-     * Sets switching function based on user-defined lambda dependence
-     *
-     * @param switchingFunction Univariate switching function, based on lambda dependence
-     */
-    public void setSwitchingFunction(UnivariateSwitchingFunction switchingFunction) {
-        this.switchingFunction = switchingFunction;
-    }
-
-    /**
-     * Sets lambda dependence based on user input
-     * 0: no lambda dependence
-     * 1: cubic lambda dependence
-     * 2: bell curve lambda dependence
-     *
-     * @param lamDependence Integer to describe lambda dependence
-     */
-    public void setLamDependence(int lamDependence) {
-        this.lamDependence = lamDependence;
-    }
-
-    /**
-     * Sets midpoint of lambda bell curve dependence
-     *
-     * @param midpoint Midpoint of bell curve
-     */
-    public void setMidpoint(double midpoint) {
-        this.midpoint = midpoint;
-    }
 
     /**
      * {@inheritDoc}
@@ -128,6 +98,23 @@ public class RestraintBond extends BondedTerm implements LambdaInterface {
     @Override
     public void setLambda(double lambda) {
         this.lambda = lambda;
+        if (lambdaTerm) {
+            if (lambda < restraintLambdaStart) {
+                restraintLambda = 1.0;
+                switchVal = 1.0;
+                switchdUdL = 0;
+                switchd2UdL2 = 0;
+            }
+            restraintLambda = 1.0 - (lambda - restraintLambdaStart) / restraintLambdaWindow;
+            switchVal = switchingFunction.valueAt(restraintLambda);
+            switchdUdL = switchingFunction.firstDerivative(restraintLambda);
+            switchd2UdL2 = switchingFunction.secondDerivative(restraintLambda);
+        } else {
+            restraintLambda = 1.0;
+            switchVal = 1.0;
+            switchdUdL = 0.0;
+            switchd2UdL2 = 0.0;
+        }
     }
 
     /**
@@ -226,7 +213,20 @@ public class RestraintBond extends BondedTerm implements LambdaInterface {
      * @param a2      Atom number 2.
      * @param crystal the Crystal defines boundary and symmetry conditions.
      */
-    public RestraintBond(Atom a1, Atom a2, Crystal crystal) {
+    public RestraintBond(Atom a1, Atom a2, Crystal crystal, boolean lambdaTerm) {
+        this(a1, a2, crystal, lambdaTerm, new ConstantSwitch());
+    }
+
+    /**
+     * Creates a distance restraint between two Atoms.
+     *
+     * @param a1 First Atom.
+     * @param a2 Second Atom.
+     * @param crystal Any Crystal used by the system.
+     * @param lambdaTerm Whether lambda affects this restraint.
+     * @param sf Switching function determining lambda dependence; null produces a ConstantSwitch.
+     */
+    public RestraintBond(Atom a1, Atom a2, Crystal crystal, boolean lambdaTerm, UnivariateSwitchingFunction sf) {
         atoms = new Atom[2];
 
         this.crystal = crystal;
@@ -242,6 +242,9 @@ public class RestraintBond extends BondedTerm implements LambdaInterface {
         }
         setID_Key(false);
         viewModel = RendererCache.ViewModel.WIREFRAME;
+        switchingFunction = (sf == null ? new ConstantSwitch() : sf);
+        this.lambdaTerm = lambdaTerm;
+        this.setLambda(1.0);
     }
 
     /**
@@ -686,40 +689,9 @@ public class RestraintBond extends BondedTerm implements LambdaInterface {
         double dv2 = dv * dv;
         double kx2 = units * bondType.forceConstant * dv2 * esvLambda;
 
-        // Note -- the application of the code below with the switchingFunction has a bug that
-        // causes a test from Jacob's thesis to fail.
-
-        /**
-        // Compute energy and derivatives with respect to lambda.
-        energy = switchingFunction.valueAt(lambda) * kx2;
-        dEdL = switchingFunction.firstDerivative(lambda) * kx2;
-        d2EdL2 = switchingFunction.secondDerivative(lambda) * kx2;
-        // Probably magnitude of the force vector
-        double deddt = 2.0 * units * bondType.forceConstant * dv * esvLambda;
-        double de = 0.0;
-        if (value > 0.0) {
-            de = deddt / value;
-        }
-        scalar(v10, switchingFunction.valueAt(lambda) * de, g0);
-        scalar(v10, -switchingFunction.valueAt(lambda) * de, g1);
-        if (gradient) {
-            grad.add(threadID, atoms[0].getIndex() - 1, g0[0], g0[1], g0[2]);
-            grad.add(threadID, atoms[1].getIndex() - 1, g1[0], g1[1], g1[2]);
-        }
-        // Remove the factor of rL3
-        scalar(v10, switchingFunction.firstDerivative(lambda) * de, g0);
-        scalar(v10, -switchingFunction.firstDerivative(lambda) * de, g1);
-        dEdXdL[0][0] = g0[0];
-        dEdXdL[0][1] = g0[1];
-        dEdXdL[0][2] = g0[2];
-        dEdXdL[1][0] = g1[0];
-        dEdXdL[1][1] = g1[1];
-        dEdXdL[1][2] = g1[2];
-         */
-
-        energy = rL3 * kx2;
-        dEdL = rL2 * kx2;
-        d2EdL2 = rL1 * kx2;
+        energy = switchVal * kx2;
+        dEdL = switchdUdL * kx2;
+        d2EdL2 = switchd2UdL2 * kx2;
         double deddt = 2.0 * units * bondType.forceConstant * dv * esvLambda;
         double de = 0.0;
 
@@ -727,16 +699,16 @@ public class RestraintBond extends BondedTerm implements LambdaInterface {
             de = deddt / value;
         }
 
-        scalar(v10, rL3 * de, g0);
-        scalar(v10, -rL3 * de, g1);
+        scalar(v10, switchVal * de, g0);
+        scalar(v10, -switchVal * de, g1);
         if (gradient) {
             grad.add(threadID, atoms[0].getIndex() - 1, g0[0], g0[1], g0[2]);
             grad.add(threadID, atoms[1].getIndex() - 1, g1[0], g1[1], g1[2]);
         }
 
         // Remove the factor of rL3
-        scalar(v10, rL2 * de, g0);
-        scalar(v10, -rL2 * de, g1);
+        scalar(v10, switchdUdL * de, g0);
+        scalar(v10, -switchdUdL * de, g1);
         dEdXdL[0][0] = g0[0];
         dEdXdL[0][1] = g0[1];
         dEdXdL[0][2] = g0[2];
@@ -774,5 +746,16 @@ public class RestraintBond extends BondedTerm implements LambdaInterface {
                 "Restraint-Bond", atoms[0].getIndex(), atoms[0].getName(),
                 atoms[1].getIndex(), atoms[1].getName(),
                 bondType.distance, value, energy));*/
+    }
+
+    @Override
+    public String toString() {
+        StringBuilder sb = new StringBuilder(String.format(" Distance restraint between atoms %s-%d %s-%d, " +
+                "current distance %10.4g, optimum %10.4g with a %10.4g Angstrom flat bottom, with force constant %10.4g.",
+                atoms[0],atoms[0].getIndex(), atoms[1], atoms[1].getIndex(), value, bondType.distance, bondType.flatBottomRadius, bondType.forceConstant));
+        if (!(switchingFunction instanceof ConstantSwitch)) {
+            sb.append(String.format("\n Switching function (lambda dependence): %s", switchingFunction.toString()));
+        }
+        return sb.toString();
     }
 }
