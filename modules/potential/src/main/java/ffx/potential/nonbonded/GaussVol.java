@@ -210,14 +210,14 @@ public class GaussVol {
      * to Tinker Solvent-Accessible Volumes (using H and a probe of 1.4 in Tinker)
      */
     //private double volumeOffsetTinker = 22.085;
-    private double volumeOffsetTinker = 27.939;
+    private double volumeOffsetVdwToSEV = 27.939;
     /**
      * Surface Area offset in Ang^2
      * Set based on comparison of FFX Surface Areas for small alkanes (methane-decane)
      * to Tinker Solvent-Accessible Surface Areas (using H and a probe of 1.4 in Tinker)
      */
     //private double surfaceAreaOffsetTinker = 42.208;
-    private double surfaceAreaOffsetTinker = 46.111;
+    private double surfaceAreaOffsetVdwToSASA = 46.111;
     /**
      * Surface tension in kcal/mol/Ang^2.
      */
@@ -500,7 +500,7 @@ public class GaussVol {
         }
 
         // Save the total molecular volume.
-        volume = totalVolume[0] + volumeOffsetTinker;
+        volume = totalVolume[0] + volumeOffsetVdwToSEV;
 
         // Calculate a purely volume based cavitation energy.
         volumeEnergy = volume * solventPressure;
@@ -542,7 +542,7 @@ public class GaussVol {
         }
 
         // Calculate the surface area.
-        surfaceArea = ((selfVolumeOffsetSum - selfVolumeSum) / offset) + surfaceAreaOffsetTinker;
+        surfaceArea = ((selfVolumeOffsetSum - selfVolumeSum) / offset) + surfaceAreaOffsetVdwToSASA;
 
         // Calculate a purely surface area based cavitation energy.
         surfaceAreaEnergy = surfaceArea * surfaceTension;
