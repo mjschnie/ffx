@@ -250,6 +250,12 @@ class LambdaGradient extends PotentialScript {
 
         // Test Lambda gradient in the neighborhood of the lambda variable.
         for (int j = 0; j < 3; j++) {
+            // Reset counts.
+            ndEdLFailures = 0;
+            ndEdXFailures = 0;
+            ndEdXdLFailures = 0;
+            nd2EdL2Failures = 0;
+
             lambda = alchemical.initialLambda - lambdaMoveSize + lambdaMoveSize * j
 
             if (lambda - gradientOptions.dx < 0.0) {

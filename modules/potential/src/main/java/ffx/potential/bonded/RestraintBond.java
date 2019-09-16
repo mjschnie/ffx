@@ -84,9 +84,10 @@ public class RestraintBond extends BondedTerm implements LambdaInterface {
     private double switchVal = 1.0;
     private double switchdUdL = 1.0;
     private double switchd2UdL2 = 1.0;
-    private double restraintLambdaStart = 0.75;
+    private final double restraintLambdaStart = 0.75;
     private final double restraintLambdaStop = 1.00;
-    private double restraintLambdaWindow = (restraintLambdaStop - restraintLambdaStart);
+    private final double restraintLambdaWindow = (restraintLambdaStop - restraintLambdaStart);
+    private final double rlwInv = 1.0 / restraintLambdaWindow;
     private final UnivariateSwitchingFunction switchingFunction;
     private double dEdL = 0.0;
     private double d2EdL2 = 0.0;
@@ -100,15 +101,21 @@ public class RestraintBond extends BondedTerm implements LambdaInterface {
         this.lambda = lambda;
         if (lambdaTerm) {
             if (lambda < restraintLambdaStart) {
+                restraintLambda = 0.0;
+                switchVal = 0.0;
+                switchdUdL = 0;
+                switchd2UdL2 = 0;
+            } else if (lambda > restraintLambdaStop) {
                 restraintLambda = 1.0;
                 switchVal = 1.0;
                 switchdUdL = 0;
                 switchd2UdL2 = 0;
+            } else {
+                restraintLambda = (lambda - restraintLambdaStart) / restraintLambdaWindow;
+                switchVal = switchingFunction.valueAt(restraintLambda);
+                switchdUdL = rlwInv * switchingFunction.firstDerivative(restraintLambda);
+                switchd2UdL2 = rlwInv * rlwInv * switchingFunction.secondDerivative(restraintLambda);
             }
-            restraintLambda = 1.0 - (lambda - restraintLambdaStart) / restraintLambdaWindow;
-            switchVal = switchingFunction.valueAt(restraintLambda);
-            switchdUdL = switchingFunction.firstDerivative(restraintLambda);
-            switchd2UdL2 = switchingFunction.secondDerivative(restraintLambda);
         } else {
             restraintLambda = 1.0;
             switchVal = 1.0;
