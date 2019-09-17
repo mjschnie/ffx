@@ -1987,11 +1987,19 @@ public class ForceFieldEnergyOpenMM extends ForceFieldEnergy {
                         addCustomNonbondedSoftcoreForce();
                         // Re-initialize the context.
                         openMMContext.reinitContext();
-                        softcoreCreated = true;
+
                     }
                     openMMContext.setParameter("vdw_lambda", lambdaVDW);
                 } else if (amoebaVDWForce != null) {
                     openMMContext.setParameter("AmoebaVdwLambda", lambdaVDW);
+                    if (softcoreCreated) {
+                        // Avoid any updateParametersInContext calls if vdwLambdaTerm is true, but not other alchemical terms.
+                        if (!torsionLambdaTerm && !elecLambdaTerm) {
+                            return;
+                        }
+                    } else {
+                        softcoreCreated = true;
+                    }
                 }
             }
 
@@ -2038,6 +2046,7 @@ public class ForceFieldEnergyOpenMM extends ForceFieldEnergy {
             if (amoebaWcaDispersionForce != null) {
                 updateWCAForce(atoms);
             }
+
         }
 
         /**

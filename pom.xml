@@ -477,7 +477,6 @@
                                              srcdir="${basedir}/src/main/groovy/"
                                              listfiles="false" verbose="true"
                                              stacktrace="true" parameters="true">
-
                                         <classpath refid="maven.compile.classpath"/>
                                     </groovyc>
                                 </target>
@@ -558,9 +557,8 @@
                                 <requireMavenVersion>
                                     <version>3.0</version>
                                 </requireMavenVersion>
-                                <!-- Note Groovy 2.5.6 is not compatible with JDK 13 -->
                                 <requireJavaVersion>
-                                    <version>[1.8,12.1]</version>
+                                    <version>[1.8,13.1]</version>
                                 </requireJavaVersion>
                             </rules>
                         </configuration>
@@ -590,7 +588,6 @@
                                            use="true"
                                            windowtitle="${project.name}"
                                            doctitle="${project.name}"
-
                                 />
                             </target>
                         </configuration>
@@ -1112,7 +1109,7 @@
         <commons-lang3.version>3.9</commons-lang3.version>
         <commons-math3.version>3.6.1</commons-math3.version>
         <guava.version>27.1-jre</guava.version>
-        <groovy-all.version>2.5.6.1</groovy-all.version>
+        <groovy-all.version>2.5.8.1</groovy-all.version>
         <javahelp.version>2.0.05</javahelp.version>
         <java3d.version>1.7.0</java3d.version>
         <jogamp-fat.version>2.4.0</jogamp-fat.version>
@@ -1125,7 +1122,7 @@
         <cdk.version>2.0</cdk.version>
         <clustering.version>1.1.0</clustering.version>
         <fastutil.version>8.2.1</fastutil.version>
-        <picocli.version>3.9.2</picocli.version>
+        <picocli.version>4.0.1</picocli.version>
         <!-- Tensor Flow 1.12 depends on Cuda 9.2; version 1.13.1 depends on Cuda 10.0 -->
         <tensorflow.version>1.12.0</tensorflow.version>
         <!-- Maven Core Plugin Versions -->
