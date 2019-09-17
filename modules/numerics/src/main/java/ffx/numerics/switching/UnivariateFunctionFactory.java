@@ -105,7 +105,11 @@ public class UnivariateFunctionFactory {
         if (toks.length > 2) {
             midpoint = Double.parseDouble(toks[1]);
         }
-        return new BellCurveSwitch(midpoint);
+        double width = 1.0;
+        if (toks.length > 3) {
+            width = Double.parseDouble(toks[2]);
+        }
+        return new BellCurveSwitch(midpoint, width);
     }
 
     private static MultiplicativeSwitch parseMultiplicative(String[] toks) {

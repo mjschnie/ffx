@@ -37,33 +37,51 @@
 //******************************************************************************
 package ffx.numerics.switching;
 
-import static org.apache.commons.math3.util.FastMath.max;
-import static org.apache.commons.math3.util.FastMath.min;
+import org.apache.commons.math3.util.FastMath;
 
 /**
- * TODO: Description by Jacob and Rae.
+ * Implements a bell-shaped switching function by stitching together
+ * a pair of MultiplicativeSwitches. f(midpoint - 0.5*width) = 0,
+ * f(midpoint) = 1, f(midpoint + 0.5*width) = 0.
  *
  * @author Jacob M. Litman
  * @author Rae Corrigan
  */
 public class BellCurveSwitch implements UnivariateSwitchingFunction {
-    private double off;
-    private double cut;
     private final double midpoint;
-    private UnivariateSwitchingFunction switchingFunction;
-    private UnivariateSwitchingFunction secondSwitchingFunction;
+    private final double halfWidth;
+    private final double invWidth;
+    private final UnivariateSwitchingFunction switchingFunction;
+    private final UnivariateSwitchingFunction secondSwitchingFunction;
 
+    /**
+     * Construct a bell curve (spliced 5-'th order Hermite splines) of width 1.0, midpoint 0.5.
+     */
+    public BellCurveSwitch() {
+        this(0.5);
+    }
+
+    /**
+     * Construct a bell curve (spliced 5-'th order Hermite splines) of width 1.0.
+     *
+     * @param midpoint Midpoint of the curve.
+     */
     public BellCurveSwitch(double midpoint) {
+        this(midpoint, 1.0);
+    }
+
+    /**
+     * Construct a bell curve (spliced 5-'th order Hermite splines).
+     * @param midpoint Midpoint of the curve.
+     * @param width Width of the curve, between the two zero points.
+     */
+    public BellCurveSwitch(double midpoint, double width) {
         this.midpoint = midpoint;
+        invWidth = 1.0 / width;
 
-        double start = max((midpoint - 0.5), 0.0);
-        double end = min(midpoint + 0.5, 1.0);
-
-        this.off = start;
-        this.cut = end;
-
-        switchingFunction = new MultiplicativeSwitch(start, this.midpoint);
-        secondSwitchingFunction = new MultiplicativeSwitch(this.midpoint, end);
+        halfWidth = 0.5 * width;
+        switchingFunction = new MultiplicativeSwitch(midpoint - halfWidth, midpoint);
+        secondSwitchingFunction = new MultiplicativeSwitch(midpoint + halfWidth, midpoint);
     }
 
     /**
@@ -71,7 +89,7 @@ public class BellCurveSwitch implements UnivariateSwitchingFunction {
      */
     @Override
     public double getZeroBound() {
-        return min(off, cut);
+        return midpoint - halfWidth;
     }
 
     /**
@@ -79,7 +97,7 @@ public class BellCurveSwitch implements UnivariateSwitchingFunction {
      */
     @Override
     public double getOneBound() {
-        return max(cut, off);
+        return midpoint + halfWidth;
     }
 
     /**
@@ -119,12 +137,9 @@ public class BellCurveSwitch implements UnivariateSwitchingFunction {
      */
     @Override
     public double valueAt(double x) throws IllegalArgumentException {
-        // x is input lambda value
         if (x > midpoint) {
-            //second switch
             return secondSwitchingFunction.valueAt(x);
         } else {
-            //first switch
             return switchingFunction.valueAt(x);
         }
     }
@@ -135,21 +150,21 @@ public class BellCurveSwitch implements UnivariateSwitchingFunction {
     @Override
     public double firstDerivative(double x) {
         if (x > midpoint) {
-            return secondSwitchingFunction.firstDerivative(x);
+            return invWidth * secondSwitchingFunction.firstDerivative(x);
         } else {
-            return switchingFunction.firstDerivative(x);
+            return invWidth * switchingFunction.firstDerivative(x);
         }
     }
 
     /**
-     * {@inheritDoc}
+     * {@inheritDoc}return max(cut, off);
      */
     @Override
     public double secondDerivative(double x) {
         if (x > midpoint) {
-            return secondSwitchingFunction.secondDerivative(x);
+            return invWidth * invWidth * secondSwitchingFunction.secondDerivative(x);
         } else {
-            return switchingFunction.secondDerivative(x);
+            return invWidth * invWidth * switchingFunction.secondDerivative(x);
         }
     }
 
@@ -158,10 +173,17 @@ public class BellCurveSwitch implements UnivariateSwitchingFunction {
      */
     @Override
     public double nthDerivative(double x, int order) throws IllegalArgumentException {
+        double mult = FastMath.pow(invWidth, order);
         if (x > midpoint) {
-            return secondSwitchingFunction.nthDerivative(x, order);
+            return mult * secondSwitchingFunction.nthDerivative(x, order);
         } else {
-            return switchingFunction.nthDerivative(x, order);
+            return mult * switchingFunction.nthDerivative(x, order);
         }
+    }
+
+    @Override
+    public String toString() {
+        return String.format(" Spliced 5'th order Hermite splines with midpoint " +
+                "%11.5g, width %11.5g", midpoint, 2.0 * halfWidth);
     }
 }

@@ -47,14 +47,12 @@ package ffx.numerics.switching;
  */
 public class ConstantSwitch implements UnivariateSwitchingFunction {
 
-    // TODO: check on returns for getZeroBound and getOneBound
-
     /**
      * {@inheritDoc}
      */
     @Override
     public double getZeroBound() {
-        return 0;
+        return Double.NaN;
     }
 
     /**
@@ -70,7 +68,7 @@ public class ConstantSwitch implements UnivariateSwitchingFunction {
      */
     @Override
     public boolean constantOutsideBounds() {
-        return false;
+        return true;
     }
 
     /**
@@ -126,6 +124,14 @@ public class ConstantSwitch implements UnivariateSwitchingFunction {
      */
     @Override
     public double nthDerivative(double x, int order) throws IllegalArgumentException {
+        if (order < 0) {
+            throw new IllegalArgumentException(String.format(" Order must be > 0, was %d", order));
+        }
         return 0.0;
+    }
+
+    @Override
+    public String toString() {
+        return "Constant-value f(x) = 1, with no switching behavior (i.e. a dummy switch)";
     }
 }

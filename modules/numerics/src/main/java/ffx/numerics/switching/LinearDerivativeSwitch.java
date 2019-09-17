@@ -143,4 +143,9 @@ public class LinearDerivativeSwitch implements UnivariateSwitchingFunction {
                 return 0;
         }
     }
+
+    @Override
+    public String toString() {
+        return "Polynomial switch of form f(x) = 2x - x^2";
+    }
 }
