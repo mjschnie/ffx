@@ -62,7 +62,7 @@ public class PowerSwitch implements UnivariateSwitchingFunction {
     private final double ub;
 
     /**
-     * Default Constructor of the PowerSwitch.
+     * Default Constructor of the PowerSwitch: constructs a linear switch.
      */
     public PowerSwitch() {
         this(1.0, 1.0);

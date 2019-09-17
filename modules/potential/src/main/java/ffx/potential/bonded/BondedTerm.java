@@ -224,6 +224,15 @@ public abstract class BondedTerm extends MSNode implements BondedEnergy, Compara
     }
 
     /**
+     * Check if this BondedTerm is lambda-sensitive (e.g. a softcored dihedral).
+     *
+     * @return True if Lambda affects the energy of this term.
+     */
+    public boolean isLambdaScaled() {
+        return false;
+    }
+
+    /**
      * Check if this BondedTerm is constrained.
      *
      * @return If constrained.
