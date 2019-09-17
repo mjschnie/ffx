@@ -2659,28 +2659,28 @@ public final class PDBFilter extends SystemFilter {
                 try {
                     switch (hetatm) {
                         case NA:
-                            atom.setAtomType(findAtomType(2003));
+                            atom.setAtomType(findAtomType(2004));
                             break;
                         case K:
-                            atom.setAtomType(findAtomType(2004));
+                            atom.setAtomType(findAtomType(2005));
                             break;
                         case MG:
                         case MG2:
-                            atom.setAtomType(findAtomType(2005));
+                            atom.setAtomType(findAtomType(2008));
                             break;
                         case CA:
                         case CA2:
-                            atom.setAtomType(findAtomType(2006));
+                            atom.setAtomType(findAtomType(2009));
                             break;
                         case CL:
-                            atom.setAtomType(findAtomType(2007));
+                            atom.setAtomType(findAtomType(2011));
                             break;
-                        case ZN:
+                        /*case ZN:
                         case ZN2:
                             atom.setAtomType(findAtomType(2008));
-                            break;
+                            break;*/
                         case BR:
-                            atom.setAtomType(findAtomType(2009));
+                            atom.setAtomType(findAtomType(2012));
                             break;
                         default:
                             logger.severe(format(" Check residue %s of chain %s.", ion.toString(), ion.getChainID()));
