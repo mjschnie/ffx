@@ -4439,7 +4439,24 @@ public class ForceFieldEnergy implements CrystalPotential, LambdaInterface {
             public void run(int first, int last) throws Exception {
                 for (int i = first; i <= last; i++) {
                     BondedTerm term = terms[i];
-                    if (!lambdaBondedTerms || term.applyLambda()) {
+                    /*
+                     * The logic here deals with how DualTopologyEnergy (DTE) works.
+                     * If this ForceFieldEnergy (FFE) is not part of a DTE, lambdaBondedTerms is always false, and the term is always evaluated.
+                     *
+                     * Most bonded terms should be at full-strength, regardless of lambda, "complemented" to 1.0*strength.
+                     * Outside FFE, DTE scales the initial, !lambdaBondedTerms evaluation by f(lambda).
+                     *
+                     * In the case of a bonded term lacking any softcore atoms, this will be externally complemented by the other FFE topology.
+                     * If there is internal lambda-scaling, that will separately apply at both ends.
+                     *
+                     * In the case of a bonded term with a softcore atom, it's a bit trickier.
+                     * If it's unscaled by lambda, it needs to be internally complemented; we re-evaluate it with lambdaBondedTerms true.
+                     * This second evaluation is scaled by DTE by a factor of f(1-lambda), and becomes "restraintEnergy".
+                     * If it is scaled internally by lambda, we assume that the energy term is not meant to be internally complemented.
+                     * In that case, we skip evaluation into restraintEnergy.
+                     */
+                    boolean used = !lambdaBondedTerms || (term.applyLambda() && !term.isLambdaScaled());
+                    if (used) {
                         localEnergy += term.energy(gradient, threadID, grad, lambdaGrad);
                         if (computeRMSD) {
                             double value = term.getValue();
