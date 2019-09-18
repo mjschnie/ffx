@@ -50,6 +50,8 @@ import static org.apache.commons.math3.util.FastMath.exp;
 import static org.apache.commons.math3.util.FastMath.pow;
 import static org.apache.commons.math3.util.FastMath.sqrt;
 
+import ffx.numerics.atomic.AtomicDoubleArray;
+import ffx.numerics.atomic.AtomicDoubleArray3D;
 import ffx.numerics.switching.MultiplicativeSwitch;
 import static ffx.numerics.math.VectorMath.diff;
 import static ffx.numerics.math.VectorMath.rsq;
@@ -228,7 +230,7 @@ public class GaussVol {
      * Originally 3.0*surfaceTension/solventPressure
      * Reset to 7.339 to match Tinker
      */
-    private double crossOver = Double.parseDouble(System.getProperty("crossover",CROSSOVER));
+    private double crossOver = Double.parseDouble(System.getProperty("crossover", CROSSOVER));
     /**
      * Begin turning off the Volume term.
      */
@@ -454,7 +456,8 @@ public class GaussVol {
      * @return The cavitation energy.
      */
     public double computeVolumeAndSA(double[][] positions) {
-        return energyAndGradient(positions, new double[3][positions.length]);
+        return energyAndGradient(positions, new AtomicDoubleArray3D(
+                AtomicDoubleArray.AtomicDoubleArrayImpl.MULTI, positions.length, 1));
     }
 
     /**
@@ -464,7 +467,7 @@ public class GaussVol {
      * @param gradient  Atomic coordinate gradient.
      * @return The cavitation energy.
      */
-    public double energyAndGradient(double[][] positions, double[][] gradient) {
+    public double energyAndGradient(double[][] positions, AtomicDoubleArray3D gradient) {
 
         // Output
         double[][] grad = new double[nAtoms][3];
@@ -519,8 +522,8 @@ public class GaussVol {
         }
 
         // Print Crossover Point and Solvent Pressure Values
-        System.out.println("\nCrossover Point: "+crossOver);
-        System.out.println("Solvent Pressure: "+solventPressure+"\n");
+        System.out.println("\nCrossover Point: " + crossOver);
+        System.out.println("Solvent Pressure: " + solventPressure + "\n");
 
         // Run Volume calculation on radii that are slightly offset in order to do finite difference to get back surface area
         rescanTreeVolumes(positions);
@@ -603,14 +606,18 @@ public class GaussVol {
      * @param dTaperVolumedR Derivative of the tapered volume with respect to effective radius.
      * @param gradient       Array to accumulate derivatives.
      */
-    private void addVolumeGradient(double taperVolume, double dTaperVolumedR, double[][] gradient) {
+    private void addVolumeGradient(double taperVolume, double dTaperVolumedR, AtomicDoubleArray3D gradient) {
         taperVolume *= solventPressure;
         dTaperVolumedR *= volumeEnergy;
         for (int i = 0; i < nAtoms; i++) {
             int index = i * 3;
-            gradient[0][i] += taperVolume * volumeGradient[index] + dTaperVolumedR * surfaceAreaGradient[index++];
-            gradient[1][i] += taperVolume * volumeGradient[index] + dTaperVolumedR * surfaceAreaGradient[index++];
-            gradient[2][i] += taperVolume * volumeGradient[index] + dTaperVolumedR * surfaceAreaGradient[index];
+//            gradient[0][i] += taperVolume * volumeGradient[index] + dTaperVolumedR * surfaceAreaGradient[index++];
+//            gradient[1][i] += taperVolume * volumeGradient[index] + dTaperVolumedR * surfaceAreaGradient[index++];
+//            gradient[2][i] += taperVolume * volumeGradient[index] + dTaperVolumedR * surfaceAreaGradient[index];
+            double gx = taperVolume * volumeGradient[index] + dTaperVolumedR * surfaceAreaGradient[index++];
+            double gy = taperVolume * volumeGradient[index] + dTaperVolumedR * surfaceAreaGradient[index++];
+            double gz = taperVolume * volumeGradient[index] + dTaperVolumedR * surfaceAreaGradient[index];
+            gradient.add(0, i, gx, gy, gz);
         }
     }
 
@@ -621,13 +628,17 @@ public class GaussVol {
      * @param dTaperSAdR Derivative of the tapered surface area with respect to effective radius.
      * @param gradient   Array to accumulate derivatives.
      */
-    private void addSurfaceAreaGradient(double taperSA, double dTaperSAdR, double[][] gradient) {
+    private void addSurfaceAreaGradient(double taperSA, double dTaperSAdR, AtomicDoubleArray3D gradient) {
         double factor = surfaceTension * taperSA + surfaceAreaEnergy * dTaperSAdR;
         for (int i = 0; i < nAtoms; i++) {
             int index = i * 3;
-            gradient[0][i] += factor * surfaceAreaGradient[index++];
-            gradient[1][i] += factor * surfaceAreaGradient[index++];
-            gradient[2][i] += factor * surfaceAreaGradient[index];
+//            gradient[0][i] += factor * surfaceAreaGradient[index++];
+//            gradient[1][i] += factor * surfaceAreaGradient[index++];
+//            gradient[2][i] += factor * surfaceAreaGradient[index];
+            double gx = factor * surfaceAreaGradient[index++];
+            double gy = factor * surfaceAreaGradient[index++];
+            double gz = factor * surfaceAreaGradient[index];
+            gradient.add(0, i, gx, gy, gz);
         }
     }
 

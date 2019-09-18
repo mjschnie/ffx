@@ -105,4 +105,6 @@ public interface AtomicDoubleArray {
      */
     double get(int index);
 
+
+
 }

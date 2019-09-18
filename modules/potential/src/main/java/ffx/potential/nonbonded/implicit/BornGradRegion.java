@@ -39,7 +39,6 @@ package ffx.potential.nonbonded.implicit;
 
 import java.util.logging.Level;
 import java.util.logging.Logger;
-
 import static java.lang.Double.isInfinite;
 import static java.lang.Double.isNaN;
 import static java.lang.String.format;
@@ -54,9 +53,9 @@ import edu.rit.pj.reduction.SharedDoubleArray;
 
 import ffx.crystal.Crystal;
 import ffx.crystal.SymOp;
+import ffx.numerics.atomic.AtomicDoubleArray3D;
 import ffx.potential.bonded.Atom;
 import ffx.potential.utils.EnergyException;
-
 
 /**
  * Compute Born radii chain rule terms in parallel via the Grycuk method.
@@ -127,11 +126,11 @@ public class BornGradRegion extends ParallelRegion {
     /**
      * Gradient array for each thread.
      */
-    private double[][][] grad;
+    private AtomicDoubleArray3D grad;
     /**
      * Lambda gradient array for each thread (dU/dX/dL)
      */
-    private double[][][] lambdaGrad;
+    private AtomicDoubleArray3D lambdaGrad;
     /**
      * Shared array for computation of Born radii gradient.
      */
@@ -150,7 +149,7 @@ public class BornGradRegion extends ParallelRegion {
                      double[] baseRadius, double[] overlapScale, boolean[] use, double cut2,
                      boolean nativeEnvironmentApproximation, double[] born,
                      boolean lambdaTerm, double lPow, double dlPow,
-                     double[][][] grad, double[][][] lambdaGrad, SharedDoubleArray sharedBornGrad) {
+                     AtomicDoubleArray3D grad, AtomicDoubleArray3D lambdaGrad, SharedDoubleArray sharedBornGrad) {
         this.atoms = atoms;
         this.crystal = crystal;
         this.sXYZ = sXYZ;
@@ -191,12 +190,7 @@ public class BornGradRegion extends ParallelRegion {
 
         private final double factor = -pow(PI, oneThird) * pow(6.0, (2.0 * oneThird)) / 9.0;
         private final double[] dx_local;
-        private double[] gX;
-        private double[] gY;
-        private double[] gZ;
-        private double[] lgX;
-        private double[] lgY;
-        private double[] lgZ;
+        private int threadID;
         // Extra padding to avert cache interference.
         private long pad0, pad1, pad2, pad3, pad4, pad5, pad6, pad7;
         private long pad8, pad9, pada, padb, padc, padd, pade, padf;
@@ -207,15 +201,7 @@ public class BornGradRegion extends ParallelRegion {
 
         @Override
         public void start() {
-            int threadID = getThreadIndex();
-            gX = grad[threadID][0];
-            gY = grad[threadID][1];
-            gZ = grad[threadID][2];
-            if (lambdaTerm) {
-                lgX = lambdaGrad[threadID][0];
-                lgY = lambdaGrad[threadID][1];
-                lgZ = lambdaGrad[threadID][2];
-            }
+            threadID = getThreadIndex();
         }
 
         /**
@@ -285,24 +271,23 @@ public class BornGradRegion extends ParallelRegion {
             double dedx = dE * xr;
             double dedy = dE * yr;
             double dedz = dE * zr;
-            gX[i] += lPow * dedx;
-            gY[i] += lPow * dedy;
-            gZ[i] += lPow * dedz;
-
             final double dedxk = dedx * transOp[0][0] + dedy * transOp[1][0] + dedz * transOp[2][0];
             final double dedyk = dedx * transOp[0][1] + dedy * transOp[1][1] + dedz * transOp[2][1];
             final double dedzk = dedx * transOp[0][2] + dedy * transOp[1][2] + dedz * transOp[2][2];
-
-            gX[k] -= lPow * dedxk;
-            gY[k] -= lPow * dedyk;
-            gZ[k] -= lPow * dedzk;
+//            gX[k] -= lPow * dedxk;
+//            gY[k] -= lPow * dedyk;
+//            gZ[k] -= lPow * dedzk;
+            grad.add(threadID, i, lPow * dedx, lPow * dedy, lPow * dedz);
+            grad.sub(threadID, k, lPow * dedxk, lPow * dedyk, lPow * dedzk);
             if (lambdaTerm) {
-                lgX[i] += dlPow * dedx;
-                lgY[i] += dlPow * dedy;
-                lgZ[i] += dlPow * dedz;
-                lgX[k] -= dlPow * dedxk;
-                lgY[k] -= dlPow * dedyk;
-                lgZ[k] -= dlPow * dedzk;
+//                lgX[i] += dlPow * dedx;
+//                lgY[i] += dlPow * dedy;
+//                lgZ[i] += dlPow * dedz;
+//                lgX[k] -= dlPow * dedxk;
+//                lgY[k] -= dlPow * dedyk;
+//                lgZ[k] -= dlPow * dedzk;
+                lambdaGrad.add(threadID, i, dlPow * dedx, dlPow * dedy, dlPow * dedz);
+                lambdaGrad.sub(threadID, k, dlPow * dedxk, dlPow * dedyk, dlPow * dedzk);
             }
         }
 

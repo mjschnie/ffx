@@ -55,6 +55,7 @@ import edu.rit.pj.reduction.SharedInteger;
 
 import ffx.crystal.Crystal;
 import ffx.crystal.SymOp;
+import ffx.numerics.atomic.AtomicDoubleArray3D;
 import ffx.potential.bonded.Angle;
 import ffx.potential.bonded.Atom;
 import ffx.potential.bonded.Bond;
@@ -65,8 +66,8 @@ import ffx.potential.nonbonded.ParticleMeshEwald.LambdaMode;
 import ffx.potential.nonbonded.ParticleMeshEwald.Polarization;
 import ffx.potential.nonbonded.ParticleMeshEwaldCart.AlchemicalParameters;
 import ffx.potential.nonbonded.ParticleMeshEwaldCart.EwaldParameters;
-import ffx.potential.nonbonded.ParticleMeshEwaldCart.ScaleParameters;
 import ffx.potential.nonbonded.ParticleMeshEwaldCart.RealSpaceNeighborParameters;
+import ffx.potential.nonbonded.ParticleMeshEwaldCart.ScaleParameters;
 import ffx.potential.parameters.ForceField;
 import ffx.potential.parameters.MultipoleType.MultipoleFrameDefinition;
 import ffx.potential.utils.EnergyException;
@@ -177,23 +178,21 @@ public class RealSpaceEnergyRegion extends ParallelRegion {
     private long[] realSpaceEnergyTime;
 
     /**
-     * Gradient array for each thread. [threadID][X/Y/Z][atomID]
+     * Atomic Gradient array.
      */
-    private double[][][] grad;
+    private AtomicDoubleArray3D grad;
     /**
-     * Torque array for each thread. [threadID][X/Y/Z][atomID]
+     * Atomic Torque array.
      */
-    private double[][][] torque;
+    private AtomicDoubleArray3D torque;
     /**
      * Partial derivative of the gradient with respect to Lambda.
-     * [threadID][X/Y/Z][atomID]
      */
-    private double[][][] lambdaGrad;
+    private AtomicDoubleArray3D lambdaGrad;
     /**
      * Partial derivative of the torque with respect to Lambda.
-     * [threadID][X/Y/Z][atomID]
      */
-    private double[][][] lambdaTorque;
+    private AtomicDoubleArray3D lambdaTorque;
     /**
      * Partial derivative with respect to Lambda.
      */
@@ -309,7 +308,8 @@ public class RealSpaceEnergyRegion extends ParallelRegion {
                      int[][] axisAtom, double[][][] globalMultipole, double[][][] inducedDipole, double[][][] inducedDipoleCR,
                      boolean[] use, int[] molecule, int[][] ip11, boolean[] isSoft, double[] ipdamp, double[] thole,
                      RealSpaceNeighborParameters realSpaceNeighborParameters, long[] realSpaceEnergyTime,
-                     double[][][] grad, double[][][] torque, double[][][] lambdaGrad, double[][][] lambdaTorque,
+                     AtomicDoubleArray3D grad, AtomicDoubleArray3D torque,
+                     AtomicDoubleArray3D lambdaGrad, AtomicDoubleArray3D lambdaTorque,
                      SharedDouble shareddEdLambda, SharedDouble sharedd2EdLambda2, boolean gradient, boolean lambdaTerm,
                      LambdaMode lambdaMode, Polarization polarization,
                      EwaldParameters ewaldParameters, ScaleParameters scaleParameters, AlchemicalParameters alchemicalParameters) {
@@ -452,8 +452,6 @@ public class RealSpaceEnergyRegion extends ParallelRegion {
         private double inducedEnergy;
         private double dUdL, d2UdL2;
         private int i, k, iSymm, count;
-        private double[] gX, gY, gZ, tX, tY, tZ;
-        private double[] lgX, lgY, lgZ, ltX, ltY, ltZ;
         private double[] gxk_local, gyk_local, gzk_local;
         private double[] txk_local, tyk_local, tzk_local;
         private double[] lxk_local, lyk_local, lzk_local;
@@ -464,6 +462,7 @@ public class RealSpaceEnergyRegion extends ParallelRegion {
         private final double[] dx_local;
         private final double[][] rot_local;
         private final double[][] work;
+        private int threadID;
         // Extra padding to avert cache interference.
         private long pad0, pad1, pad2, pad3, pad4, pad5, pad6, pad7;
         private long pad8, pad9, pada, padb, padc, padd, pade, padf;
@@ -507,26 +506,14 @@ public class RealSpaceEnergyRegion extends ParallelRegion {
         @Override
         public void start() {
             init();
-            int threadIndex = getThreadIndex();
-            realSpaceEnergyTime[threadIndex] -= System.nanoTime();
+            threadID = getThreadIndex();
+            realSpaceEnergyTime[threadID] -= System.nanoTime();
             permanentEnergy = 0.0;
             inducedEnergy = 0.0;
             count = 0;
-            gX = grad[threadIndex][0];
-            gY = grad[threadIndex][1];
-            gZ = grad[threadIndex][2];
-            tX = torque[threadIndex][0];
-            tY = torque[threadIndex][1];
-            tZ = torque[threadIndex][2];
             if (lambdaTerm) {
                 dUdL = 0.0;
                 d2UdL2 = 0.0;
-                lgX = lambdaGrad[threadIndex][0];
-                lgY = lambdaGrad[threadIndex][1];
-                lgZ = lambdaGrad[threadIndex][2];
-                ltX = lambdaTorque[threadIndex][0];
-                ltY = lambdaTorque[threadIndex][1];
-                ltZ = lambdaTorque[threadIndex][2];
             }
         }
 
@@ -570,9 +557,7 @@ public class RealSpaceEnergyRegion extends ParallelRegion {
                     }
                     // Sum symmetry mate gradients into asymmetric unit gradients
                     for (int j = 0; j < nAtoms; j++) {
-                        gX[j] += gxk_local[j];
-                        gY[j] += gyk_local[j];
-                        gZ[j] += gzk_local[j];
+                        grad.add(threadID, j, gxk_local[j], gyk_local[j], gzk_local[j]);
                     }
                 }
                 if (lambdaTerm) {
@@ -589,12 +574,9 @@ public class RealSpaceEnergyRegion extends ParallelRegion {
                     }
                     // Sum symmetry mate gradients into asymmetric unit gradients
                     for (int j = 0; j < nAtoms; j++) {
-                        lgX[j] += lxk_local[j];
-                        lgY[j] += lyk_local[j];
-                        lgZ[j] += lzk_local[j];
+                        lambdaGrad.add(threadID, j, lxk_local[j], lyk_local[j], lzk_local[j]);
                     }
                 }
-
             }
         }
 
@@ -1078,12 +1060,8 @@ public class RealSpaceEnergyRegion extends ParallelRegion {
                     ttm3z -= scale1 * ttm3rz;
                 }
                 double prefactor = electric * selfScale * l2;
-                gX[i] += prefactor * ftm2x;
-                gY[i] += prefactor * ftm2y;
-                gZ[i] += prefactor * ftm2z;
-                tX[i] += prefactor * ttm2x;
-                tY[i] += prefactor * ttm2y;
-                tZ[i] += prefactor * ttm2z;
+                grad.add(threadID, i, prefactor * ftm2x, prefactor * ftm2y, prefactor * ftm2z);
+                torque.add(threadID, i, prefactor * ttm2x, prefactor * ttm2y, prefactor * ttm2z);
                 gxk_local[k] -= prefactor * ftm2x;
                 gyk_local[k] -= prefactor * ftm2y;
                 gzk_local[k] -= prefactor * ftm2z;
@@ -1094,12 +1072,8 @@ public class RealSpaceEnergyRegion extends ParallelRegion {
                 // This is dU/dL/dX for the first term of dU/dL: d[dlPow * ereal]/dx
                 if (lambdaTerm && soft) {
                     prefactor = electric * selfScale * dEdLSign * dlPowPerm;
-                    lgX[i] += prefactor * ftm2x;
-                    lgY[i] += prefactor * ftm2y;
-                    lgZ[i] += prefactor * ftm2z;
-                    ltX[i] += prefactor * ttm2x;
-                    ltY[i] += prefactor * ttm2y;
-                    ltZ[i] += prefactor * ttm2z;
+                    lambdaGrad.add(threadID, i, prefactor * ftm2x, prefactor * ftm2y, prefactor * ftm2z);
+                    lambdaTorque.add(threadID, i, prefactor * ttm2x, prefactor * ttm2y, prefactor * ttm2z);
                     lxk_local[k] -= prefactor * ftm2x;
                     lyk_local[k] -= prefactor * ftm2y;
                     lzk_local[k] -= prefactor * ftm2z;
@@ -1207,12 +1181,8 @@ public class RealSpaceEnergyRegion extends ParallelRegion {
 
                 // Add in dU/dL/dX for the second term of dU/dL: d[lPow*dlAlpha*dRealdL]/dX
                 double prefactor = electric * selfScale * l2 * dlAlpha;
-                lgX[i] += prefactor * ftm2x;
-                lgY[i] += prefactor * ftm2y;
-                lgZ[i] += prefactor * ftm2z;
-                ltX[i] += prefactor * ttm2x;
-                ltY[i] += prefactor * ttm2y;
-                ltZ[i] += prefactor * ttm2z;
+                lambdaGrad.add(threadID, i, prefactor * ftm2x, prefactor * ftm2y, prefactor * ftm2z);
+                lambdaTorque.add(threadID, i, prefactor * ttm2x, prefactor * ttm2y, prefactor * ttm2z);
                 lxk_local[k] -= prefactor * ftm2x;
                 lyk_local[k] -= prefactor * ftm2y;
                 lzk_local[k] -= prefactor * ftm2z;
@@ -1530,12 +1500,8 @@ public class RealSpaceEnergyRegion extends ParallelRegion {
             ttm3iz = ttm3iz - ttm3riz;
 
             double scalar = electric * polarizationScale * selfScale;
-            gX[i] += scalar * ftm2ix;
-            gY[i] += scalar * ftm2iy;
-            gZ[i] += scalar * ftm2iz;
-            tX[i] += scalar * ttm2ix;
-            tY[i] += scalar * ttm2iy;
-            tZ[i] += scalar * ttm2iz;
+            grad.add(threadID, i, scalar * ftm2ix, scalar * ftm2iy, scalar * ftm2iz);
+            torque.add(threadID, i, scalar * ttm2ix, scalar * ttm2iy, scalar * ttm2iz);
             gxk_local[k] -= scalar * ftm2ix;
             gyk_local[k] -= scalar * ftm2iy;
             gzk_local[k] -= scalar * ftm2iz;
@@ -1546,12 +1512,8 @@ public class RealSpaceEnergyRegion extends ParallelRegion {
                 dUdL += dEdLSign * dlPowPol * e;
                 d2UdL2 += dEdLSign * d2lPowPol * e;
                 scalar = electric * dEdLSign * dlPowPol * selfScale;
-                lgX[i] += scalar * ftm2ix;
-                lgY[i] += scalar * ftm2iy;
-                lgZ[i] += scalar * ftm2iz;
-                ltX[i] += scalar * ttm2ix;
-                ltY[i] += scalar * ttm2iy;
-                ltZ[i] += scalar * ttm2iz;
+                lambdaGrad.add(threadID, i, scalar * ftm2ix, scalar * ftm2iy, scalar * ftm2iz);
+                lambdaTorque.add(threadID, i, scalar * ttm2ix, scalar * ttm2iy, scalar * ttm2iz);
                 lxk_local[k] -= scalar * ftm2ix;
                 lyk_local[k] -= scalar * ftm2iy;
                 lzk_local[k] -= scalar * ftm2iz;

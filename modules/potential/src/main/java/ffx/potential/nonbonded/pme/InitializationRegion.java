@@ -40,7 +40,6 @@ package ffx.potential.nonbonded.pme;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import static java.util.Arrays.fill;
 
 import static org.apache.commons.math3.util.FastMath.max;
 
@@ -50,6 +49,7 @@ import edu.rit.pj.ParallelRegion;
 
 import ffx.crystal.Crystal;
 import ffx.crystal.SymOp;
+import ffx.numerics.atomic.AtomicDoubleArray3D;
 import ffx.potential.bonded.Atom;
 import ffx.potential.parameters.ForceField;
 import ffx.potential.parameters.MultipoleType.MultipoleFrameDefinition;
@@ -92,7 +92,6 @@ public class InitializationRegion extends ParallelRegion {
      * If set to false, multipole quadrupoles are set to zero (default is true).
      */
     private final boolean useQuadrupoles;
-
     /**
      * If lambdaTerm is true, some ligand atom interactions with the environment
      * are being turned on/off.
@@ -106,7 +105,6 @@ public class InitializationRegion extends ParallelRegion {
      * Scale multipole moments by a lambda scale factor.
      */
     private double lambdaScaleMultipoles;
-
     /**
      * An ordered array of atoms in the system.
      */
@@ -136,7 +134,6 @@ public class InitializationRegion extends ParallelRegion {
      */
     private double[][][] globalMultipole;
     private double[] polarizability;
-
     /**
      * When computing the polarization energy at Lambda there are 3 pieces.
      * <p>
@@ -168,26 +165,22 @@ public class InitializationRegion extends ParallelRegion {
      */
     private int[][][] realSpaceLists;
     private int[][][] vaporLists;
-
     /**
-     * Gradient array for each thread. [threadID][X/Y/Z][atomID]
+     * Atomic Gradient array.
      */
-    private double[][][] grad;
+    private AtomicDoubleArray3D grad;
     /**
-     * Torque array for each thread. [threadID][X/Y/Z][atomID]
+     * Atomic Torque array.
      */
-    private double[][][] torque;
+    private AtomicDoubleArray3D torque;
     /**
      * Partial derivative of the gradient with respect to Lambda.
-     * [threadID][X/Y/Z][atomID]
      */
-    private double[][][] lambdaGrad;
+    private AtomicDoubleArray3D lambdaGrad;
     /**
      * Partial derivative of the torque with respect to Lambda.
-     * [threadID][X/Y/Z][atomID]
      */
-    private double[][][] lambdaTorque;
-
+    private AtomicDoubleArray3D lambdaTorque;
     private final InitializationLoop[] initializationLoop;
     private final RotateMultipolesLoop[] rotateMultipolesLoop;
 
@@ -205,8 +198,8 @@ public class InitializationRegion extends ParallelRegion {
                      MultipoleFrameDefinition[] frame, int[][] axisAtom,
                      double[][] localMultipole, double[][][] globalMultipole, double[] polarizability,
                      boolean[] use, int[][][] neighborLists, int[][][] realSpaceLists, int[][][] vaporLists,
-                     double[][][] grad, double[][][] torque,
-                     double[][][] lambdaGrad, double[][][] lambdaTorque) {
+                     AtomicDoubleArray3D grad, AtomicDoubleArray3D torque,
+                     AtomicDoubleArray3D lambdaGrad, AtomicDoubleArray3D lambdaTorque) {
         this.lambdaTerm = lambdaTerm;
         this.gradient = gradient;
         this.lambdaScaleMultipoles = lambdaScaleMultipoles;
@@ -253,6 +246,7 @@ public class InitializationRegion extends ParallelRegion {
         private double[] x;
         private double[] y;
         private double[] z;
+        private int threadID;
         // Extra padding to avert cache interference.
         private long pad0, pad1, pad2, pad3, pad4, pad5, pad6, pad7;
         private long pad8, pad9, pada, padb, padc, padd, pade, padf;
@@ -267,39 +261,18 @@ public class InitializationRegion extends ParallelRegion {
             x = coordinates[0][0];
             y = coordinates[0][1];
             z = coordinates[0][2];
-            int threadID = getThreadIndex();
-            if (gradient) {
-                double[] gX = grad[threadID][0];
-                double[] gY = grad[threadID][1];
-                double[] gZ = grad[threadID][2];
-                double[] tX = torque[threadID][0];
-                double[] tY = torque[threadID][1];
-                double[] tZ = torque[threadID][2];
-                fill(gX, 0.0);
-                fill(gY, 0.0);
-                fill(gZ, 0.0);
-                fill(tX, 0.0);
-                fill(tY, 0.0);
-                fill(tZ, 0.0);
-            }
-            if (lambdaTerm) {
-                double[] lgX = lambdaGrad[threadID][0];
-                double[] lgY = lambdaGrad[threadID][1];
-                double[] lgZ = lambdaGrad[threadID][2];
-                double[] ltX = lambdaTorque[threadID][0];
-                double[] ltY = lambdaTorque[threadID][1];
-                double[] ltZ = lambdaTorque[threadID][2];
-                fill(lgX, 0.0);
-                fill(lgY, 0.0);
-                fill(lgZ, 0.0);
-                fill(ltX, 0.0);
-                fill(ltY, 0.0);
-                fill(ltZ, 0.0);
-            }
+            threadID = getThreadIndex();
         }
 
         @Override
         public void run(int lb, int ub) {
+            grad.reset(threadID, lb, ub);
+            torque.reset(threadID, lb, ub);
+            if (lambdaTerm) {
+                lambdaGrad.reset(threadID, lb, ub);
+                lambdaTorque.reset(threadID, lb, ub);
+            }
+
             // Initialize the local coordinate arrays.
             for (int i = lb; i <= ub; i++) {
                 Atom atom = atoms[i];

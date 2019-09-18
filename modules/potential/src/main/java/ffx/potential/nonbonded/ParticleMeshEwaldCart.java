@@ -56,6 +56,8 @@ import edu.rit.pj.reduction.SharedDouble;
 import edu.rit.util.Range;
 
 import ffx.crystal.Crystal;
+import ffx.numerics.atomic.AtomicDoubleArray.AtomicDoubleArrayImpl;
+import ffx.numerics.atomic.AtomicDoubleArray3D;
 import ffx.numerics.math.VectorMath;
 import ffx.numerics.multipole.MultipoleTensor;
 import ffx.potential.ForceFieldEnergy.Platform;
@@ -311,21 +313,21 @@ public class ParticleMeshEwaldCart extends ParticleMeshEwald implements LambdaIn
     /**
      * Gradient array for each thread. [threadID][X/Y/Z][atomID]
      */
-    private double[][][] grad;
+    private AtomicDoubleArray3D grad;
     /**
      * Torque array for each thread. [threadID][X/Y/Z][atomID]
      */
-    private double[][][] torque;
+    private AtomicDoubleArray3D torque;
     /**
      * Partial derivative of the gradient with respect to Lambda.
      * [threadID][X/Y/Z][atomID]
      */
-    private double[][][] lambdaGrad;
+    private AtomicDoubleArray3D lambdaGrad;
     /**
      * Partial derivative of the torque with respect to Lambda.
      * [threadID][X/Y/Z][atomID]
      */
-    private double[][][] lambdaTorque;
+    private AtomicDoubleArray3D lambdaTorque;
     /**
      * Partial derivative with respect to Lambda.
      */
@@ -605,13 +607,13 @@ public class ParticleMeshEwaldCart extends ParticleMeshEwald implements LambdaIn
             }
 
             // Initialize per-thread memory for collecting the gradient, torque, field and chain-rule field.
-            grad = new double[maxThreads][3][nAtoms];
-            torque = new double[maxThreads][3][nAtoms];
+            grad = new AtomicDoubleArray3D(AtomicDoubleArrayImpl.MULTI, nAtoms, maxThreads);
+            torque = new AtomicDoubleArray3D(AtomicDoubleArrayImpl.MULTI, nAtoms, maxThreads);
             field = new double[maxThreads][3][nAtoms];
             fieldCR = new double[maxThreads][3][nAtoms];
             if (lambdaTerm) {
-                lambdaGrad = new double[maxThreads][3][nAtoms];
-                lambdaTorque = new double[maxThreads][3][nAtoms];
+                lambdaGrad = new AtomicDoubleArray3D(AtomicDoubleArrayImpl.MULTI, nAtoms, maxThreads);
+                lambdaTorque = new AtomicDoubleArray3D(AtomicDoubleArrayImpl.MULTI, nAtoms, maxThreads);
             }
             isSoft = new boolean[nAtoms];
             use = new boolean[nAtoms];
@@ -1168,6 +1170,22 @@ public class ParticleMeshEwaldCart extends ParticleMeshEwald implements LambdaIn
                         }
                     }
                 }
+
+                // Compute the polarization energy.
+//                try {
+//                    polarizationEnergyRegion.init(atoms, polarizability,
+//                            vacuumInducedDipole, vacuumDirectDipoleCR, alchemicalParameters.polarizationScale);
+//                    parallelTeam.execute(polarizationEnergyRegion);
+//                    double vacuumPolarizationEnergy = polarizationEnergyRegion.getPolarizationEnergy();
+//                } catch (RuntimeException e) {
+//                    String message = "Runtime exception computing the polarization energy.\n";
+//                    logger.log(Level.WARNING, message, e);
+//                    throw e;
+//                } catch (Exception ex) {
+//                    String message = "Fatal exception computing the polarization energy.\n";
+//                    logger.log(Level.SEVERE, message, ex);
+//                }
+
                 generalizedKirkwoodTerm = true;
                 permanentMultipoleField();
             }
@@ -1206,18 +1224,18 @@ public class ParticleMeshEwaldCart extends ParticleMeshEwald implements LambdaIn
             }
 
             // Compute the polarization energy.
-            try {
-                polarizationEnergyRegion.init(atoms, polarizability,
-                        inducedDipole, directDipoleCR, alchemicalParameters.polarizationScale);
-                parallelTeam.execute(polarizationEnergyRegion);
-            } catch (RuntimeException e) {
-                String message = "Runtime exception computing the polarization energy.\n";
-                logger.log(Level.WARNING, message, e);
-                throw e;
-            } catch (Exception ex) {
-                String message = "Fatal exception computing the polarization energy.\n";
-                logger.log(Level.SEVERE, message, ex);
-            }
+//            try {
+//                polarizationEnergyRegion.init(atoms, polarizability,
+//                        inducedDipole, directDipoleCR, alchemicalParameters.polarizationScale);
+//                parallelTeam.execute(polarizationEnergyRegion);
+//            } catch (RuntimeException e) {
+//                String message = "Runtime exception computing the polarization energy.\n";
+//                logger.log(Level.WARNING, message, e);
+//                throw e;
+//            } catch (Exception ex) {
+//                String message = "Fatal exception computing the polarization energy.\n";
+//                logger.log(Level.SEVERE, message, ex);
+//            }
 
             if (printInducedDipoles) {
                 StringBuilder sb = new StringBuilder();
@@ -1239,7 +1257,6 @@ public class ParticleMeshEwaldCart extends ParticleMeshEwald implements LambdaIn
          */
         try {
             if (reciprocalSpaceTerm && ewaldParameters.aewald > 0.0) {
-
                 reciprocalEnergyRegion.init(atoms, crystal, use, globalMultipole, cartesianMultipolePhi, inducedDipole, inducedDipoleCR,
                         cartesianDipolePhi, cartesianDipolePhiCR, reciprocalSpace, polarization,
                         grad, torque, lambdaGrad, lambdaTorque,
@@ -1252,6 +1269,7 @@ public class ParticleMeshEwaldCart extends ParticleMeshEwald implements LambdaIn
                 eselfi = reciprocalEnergyRegion.getInducedDipoleSelfEnergy();
                 erecipi = reciprocalEnergyRegion.getInducedDipoleReciprocalEnergy();
             }
+
             pmeTimings.realSpaceEnergyTotal -= System.nanoTime();
             realSpaceEnergyRegion.init(atoms, crystal, coordinates, frame, axisAtom,
                     globalMultipole, inducedDipole, inducedDipoleCR,
@@ -1272,8 +1290,13 @@ public class ParticleMeshEwaldCart extends ParticleMeshEwald implements LambdaIn
 
         // Compute the generalized Kirkwood solvation free energy.
         if (generalizedKirkwoodTerm) {
+            // double eDiff = ereali - vacuumPolarizationEnergy;
+            // ereali = vacuumPolarizationEnergy;
             pmeTimings.gkEnergyTotal -= System.nanoTime();
             generalizedKirkwoodEnergy += generalizedKirkwood.solvationEnergy(gradient, print);
+            if (gradient) {
+                generalizedKirkwood.reduce(grad, torque, lambdaGrad, lambdaTorque);
+            }
             gkInteractions += generalizedKirkwood.getInteractions();
             pmeTimings.gkEnergyTotal += System.nanoTime();
         }
@@ -1431,49 +1454,14 @@ public class ParticleMeshEwaldCart extends ParticleMeshEwald implements LambdaIn
      * @param grad an array of double.
      */
     public void getGradients(double[][] grad) {
-        double[] gx = this.grad[0][0];
-        double[] gy = this.grad[0][1];
-        double[] gz = this.grad[0][2];
         double[] x = grad[0];
         double[] y = grad[1];
         double[] z = grad[2];
         for (int i = 0; i < nAtoms; i++) {
-            x[i] = gx[i];
-            y[i] = gy[i];
-            z[i] = gz[i];
+            x[i] = this.grad.getX(i);
+            y[i] = this.grad.getY(i);
+            z[i] = this.grad.getZ(i);
         }
-    }
-
-    /**
-     * <p>
-     * Getter for the field <code>gradient</code>.</p>
-     *
-     * @return an array of double.
-     */
-    @Override
-    protected double[][][] getGradient() {
-        return grad;
-    }
-
-    /**
-     * <p>
-     * Getter for the field <code>torque</code>.</p>
-     *
-     * @return an array of double.
-     */
-    @Override
-    protected double[][][] getTorque() {
-        return torque;
-    }
-
-    @Override
-    protected double[][][] getLambdaGradient() {
-        return lambdaGrad;
-    }
-
-    @Override
-    protected double[][][] getLambdaTorque() {
-        return lambdaTorque;
     }
 
     /**
@@ -2228,9 +2216,9 @@ public class ParticleMeshEwaldCart extends ParticleMeshEwald implements LambdaIn
         int index = 0;
         for (int i = 0; i < nAtoms; i++) {
             if (atoms[i].isActive()) {
-                gradient[index++] += lambdaGrad[0][0][i];
-                gradient[index++] += lambdaGrad[0][1][i];
-                gradient[index++] += lambdaGrad[0][2][i];
+                gradient[index++] += lambdaGrad.getX(i);
+                gradient[index++] += lambdaGrad.getY(i);
+                gradient[index++] += lambdaGrad.getZ(i);
             }
         }
     }
@@ -2299,7 +2287,6 @@ public class ParticleMeshEwaldCart extends ParticleMeshEwald implements LambdaIn
     public String getName() {
         return "Cartesian";
     }
-
 
     public void computeInduceDipoleField() {
         expandInducedDipoles();

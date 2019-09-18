@@ -39,7 +39,6 @@ package ffx.potential.nonbonded.implicit;
 
 import java.util.logging.Level;
 import java.util.logging.Logger;
-
 import static java.lang.String.format;
 
 import static org.apache.commons.math3.util.FastMath.PI;
@@ -53,6 +52,7 @@ import edu.rit.pj.ParallelRegion;
 import edu.rit.pj.reduction.SharedDouble;
 
 import ffx.crystal.Crystal;
+import ffx.numerics.atomic.AtomicDoubleArray3D;
 import ffx.potential.bonded.Atom;
 import ffx.potential.parameters.VDWType;
 
@@ -105,11 +105,11 @@ public class DispersionRegion extends ParallelRegion {
     /**
      * Gradient array for each thread.
      */
-    private double[][][] grad;
+    private AtomicDoubleArray3D grad;
     /**
      * Lambda gradient array for each thread (dU/dX/dL)
      */
-    private double[][][] lambdaGrad;
+    private AtomicDoubleArray3D lambdaGrad;
 
     /**
      * Radius of each atom for calculation of dispersion energy.
@@ -157,7 +157,8 @@ public class DispersionRegion extends ParallelRegion {
     public void init(Atom[] atoms, Crystal crystal, boolean[] use, int[][][] neighborLists,
                      double[] x, double[] y, double[] z, double cut2,
                      boolean gradient, boolean lambdaTerm,
-                     double lPow, double dlPow, double[][][] grad, double[][][] lambdaGrad) {
+                     double lPow, double dlPow,
+                     AtomicDoubleArray3D grad, AtomicDoubleArray3D lambdaGrad) {
         this.atoms = atoms;
         this.crystal = crystal;
         this.use = use;
@@ -251,17 +252,11 @@ public class DispersionRegion extends ParallelRegion {
      * @since 1.0
      */
     private class DispersionLoop extends IntegerForLoop {
-
-        private double[] gX;
-        private double[] gY;
-        private double[] gZ;
-        private double[] lgX;
-        private double[] lgY;
-        private double[] lgZ;
         private double edisp;
         private final double[] dx_local;
         private double r, r2, r3;
         private double xr, yr, zr;
+        private int threadID;
         // Extra padding to avert cache interference.
         private long pad0, pad1, pad2, pad3, pad4, pad5, pad6, pad7;
         private long pad8, pad9, pada, padb, padc, padd, pade, padf;
@@ -272,15 +267,7 @@ public class DispersionRegion extends ParallelRegion {
 
         @Override
         public void start() {
-            int threadID = getThreadIndex();
-            gX = grad[threadID][0];
-            gY = grad[threadID][1];
-            gZ = grad[threadID][2];
-            if (lambdaTerm) {
-                lgX = lambdaGrad[threadID][0];
-                lgY = lambdaGrad[threadID][1];
-                lgZ = lambdaGrad[threadID][2];
-            }
+            threadID = getThreadIndex();
             edisp = 0;
         }
 
@@ -542,19 +529,23 @@ public class DispersionRegion extends ParallelRegion {
                     double dedx = de * xr;
                     double dedy = de * yr;
                     double dedz = de * zr;
-                    gX[i] += lPow * dedx;
-                    gY[i] += lPow * dedy;
-                    gZ[i] += lPow * dedz;
-                    gX[k] -= lPow * dedx;
-                    gY[k] -= lPow * dedy;
-                    gZ[k] -= lPow * dedz;
+//                    gX[i] += lPow * dedx;
+//                    gY[i] += lPow * dedy;
+//                    gZ[i] += lPow * dedz;
+//                    gX[k] -= lPow * dedx;
+//                    gY[k] -= lPow * dedy;
+//                    gZ[k] -= lPow * dedz;
+                    grad.add(threadID, i, lPow * dedx, lPow * dedy, lPow * dedz);
+                    grad.sub(threadID, k, lPow * dedx, lPow * dedy, lPow * dedz);
                     if (lambdaTerm) {
-                        lgX[i] += dlPow * dedx;
-                        lgY[i] += dlPow * dedy;
-                        lgZ[i] += dlPow * dedz;
-                        lgX[k] -= dlPow * dedx;
-                        lgY[k] -= dlPow * dedy;
-                        lgZ[k] -= dlPow * dedz;
+//                        lgX[i] += dlPow * dedx;
+//                        lgY[i] += dlPow * dedy;
+//                        lgZ[i] += dlPow * dedz;
+//                        lgX[k] -= dlPow * dedx;
+//                        lgY[k] -= dlPow * dedy;
+//                        lgZ[k] -= dlPow * dedz;
+                        lambdaGrad.add(threadID, i, dlPow * dedx, dlPow * dedy, dlPow * dedz);
+                        lambdaGrad.sub(threadID, k, dlPow * dedx, dlPow * dedy, dlPow * dedz);
                     }
                 }
             }

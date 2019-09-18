@@ -1992,34 +1992,15 @@ public class ParticleMeshEwaldQI extends ParticleMeshEwald {
         }
     }
 
-    /**
-     * {@inheritDoc}
-     */
-    @Override
     protected double[][][] getGradient() {
         return grad;
     }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
     protected double[][][] getTorque() {
         return torque;
     }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
     protected double[][][] getLambdaGradient() {
         return lambdaGrad;
     }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
     protected double[][][] getLambdaTorque() {
         return lambdaTorque;
     }
