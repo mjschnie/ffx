@@ -41,6 +41,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Logger;
 
+import ffx.numerics.switching.UnivariateFunctionFactory;
 import org.jogamp.java3d.BranchGroup;
 import org.jogamp.java3d.Geometry;
 import org.jogamp.java3d.LineArray;
@@ -78,16 +79,19 @@ public class RestraintBond extends BondedTerm implements LambdaInterface {
 
     private static final Logger logger = Logger.getLogger(RestraintBond.class.getName());
 
+    public static final double DEFAULT_RB_LAM_START = 0.75;
+    public static final double DEFAULT_RB_LAM_END = 1.0;
+
     private boolean lambdaTerm = false;
     private double lambda = 1.0;
     private double restraintLambda = 1.0;
     private double switchVal = 1.0;
     private double switchdUdL = 1.0;
     private double switchd2UdL2 = 1.0;
-    private final double restraintLambdaStart = 0.75;
-    private final double restraintLambdaStop = 1.00;
-    private final double restraintLambdaWindow = (restraintLambdaStop - restraintLambdaStart);
-    private final double rlwInv = 1.0 / restraintLambdaWindow;
+    private final double restraintLambdaStart;
+    private final double restraintLambdaStop;
+    private final double restraintLambdaWindow;
+    private final double rlwInv;
     private final UnivariateSwitchingFunction switchingFunction;
     private double dEdL = 0.0;
     private double d2EdL2 = 0.0;
@@ -240,6 +244,27 @@ public class RestraintBond extends BondedTerm implements LambdaInterface {
      * @param sf Switching function determining lambda dependence; null produces a ConstantSwitch.
      */
     public RestraintBond(Atom a1, Atom a2, Crystal crystal, boolean lambdaTerm, UnivariateSwitchingFunction sf) {
+        this(a1, a2, crystal, lambdaTerm, DEFAULT_RB_LAM_START, DEFAULT_RB_LAM_END, sf);
+    }
+
+    /**
+     * Creates a distance restraint between two Atoms.
+     *
+     * @param a1            First Atom.
+     * @param a2            Second Atom.
+     * @param crystal       Any Crystal used by the system.
+     * @param lambdaTerm    Whether lambda affects this restraint.
+     * @param lamStart      At what lambda does the restraint begin to take effect?
+     * @param lamEnd        At what lambda does the restraint hit full strength?
+     * @param sf            Switching function determining lambda dependence; null produces a ConstantSwitch.
+     */
+    public RestraintBond(Atom a1, Atom a2, Crystal crystal, boolean lambdaTerm, double lamStart, double lamEnd, UnivariateSwitchingFunction sf) {
+        restraintLambdaStart = lamStart;
+        restraintLambdaStop = lamEnd;
+        assert lamEnd > lamStart;
+        restraintLambdaWindow = lamEnd - lamStart;
+        rlwInv = 1.0 / restraintLambdaWindow;
+
         atoms = new Atom[2];
 
         this.crystal = crystal;

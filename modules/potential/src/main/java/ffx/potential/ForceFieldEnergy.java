@@ -703,13 +703,6 @@ public class ForceFieldEnergy implements CrystalPotential, LambdaInterface {
 
     private final List<Constraint> constraints;
 
-    /**
-     * Lambda Dependence Variables
-     */
-    private double midpoint = 0.5;
-    private double lamStart = 0.75;
-    private double lamEnd = 1;
-
 
     /**
      * <p>
@@ -1292,13 +1285,24 @@ public class ForceFieldEnergy implements CrystalPotential, LambdaInterface {
                 }
 
                 UnivariateSwitchingFunction switchF;
+                double lamStart = RestraintBond.DEFAULT_RB_LAM_START;
+                double lamEnd = RestraintBond.DEFAULT_RB_LAM_END;
                 if (toks.length > 5) {
-                    switchF = UnivariateFunctionFactory.parseUSF(toks, 5);
+                    int offset = 5;
+                    if (toks[5].matches("^[01](?:\\.[0-9]*)?")) {
+                        offset = 6;
+                        lamStart = Double.parseDouble(toks[5]);
+                        if (toks[6].matches("^[01](?:\\.[0-9]*)?")) {
+                            offset = 7;
+                            lamEnd = Double.parseDouble(toks[6]);
+                        }
+                    }
+                    switchF = UnivariateFunctionFactory.parseUSF(toks, offset);
                 } else {
                     switchF = new ConstantSwitch();
                 }
 
-                setRestraintBond(a1, a2, dist, forceConst, flatBottomRadius, switchF);
+                setRestraintBond(a1, a2, dist, forceConst, flatBottomRadius, lamStart, lamEnd, switchF);
             } catch (Exception ex) {
                 logger.info(format(" Exception in parsing restrain-distance: %s", ex.toString()));
             }
@@ -2978,24 +2982,27 @@ public class ForceFieldEnergy implements CrystalPotential, LambdaInterface {
      * @param flatBottom    Radius of a flat-bottom potential in Angstroms.
      */
     public void setRestraintBond(Atom a1, Atom a2, double distance, double forceConstant, double flatBottom) {
-        setRestraintBond(a1, a2, distance, forceConstant, flatBottom, new ConstantSwitch());
+        setRestraintBond(a1, a2, distance, forceConstant, flatBottom, RestraintBond.DEFAULT_RB_LAM_START, RestraintBond.DEFAULT_RB_LAM_END, new ConstantSwitch());
     }
 
     /**
      * <p>
      * setRestraintBond</p>
-     *
-     * @param a1                a {@link ffx.potential.bonded.Atom} object.
-     * @param a2                a {@link ffx.potential.bonded.Atom} object.
-     * @param distance          a double.
-     * @param forceConstant     the force constant in kcal/mole.
-     * @param flatBottom        Radius of a flat-bottom potential in Angstroms.
+
+     * @param a1            a {@link ffx.potential.bonded.Atom} object.
+     * @param a2            a {@link ffx.potential.bonded.Atom} object.
+     * @param distance      a double.
+     * @param forceConstant the force constant in kcal/mole.
+     * @param flatBottom    Radius of a flat-bottom potential in Angstroms.
+     * @param lamStart      At what lambda does the restraint begin to take effect?
+     * @param lamEnd        At what lambda does the restraint hit full strength?
      * @param switchingFunction Switching function to use as a lambda dependence.
      */
-    private void setRestraintBond(Atom a1, Atom a2, double distance, double forceConstant, double flatBottom, UnivariateSwitchingFunction switchingFunction) {
+    private void setRestraintBond(Atom a1, Atom a2, double distance, double forceConstant, double flatBottom,
+                                  double lamStart, double lamEnd, UnivariateSwitchingFunction switchingFunction) {
         restraintBondTerm = true;
         boolean rbLambda = !(switchingFunction instanceof ConstantSwitch) && lambdaTerm;
-        RestraintBond rb = new RestraintBond(a1, a2, crystal, rbLambda, switchingFunction);
+        RestraintBond rb = new RestraintBond(a1, a2, crystal, rbLambda, lamStart, lamEnd, switchingFunction);
         int[] classes = {a1.getAtomType().atomClass, a2.getAtomType().atomClass};
         if (flatBottom != 0) {
             rb.setBondType(new BondType(classes, forceConstant, distance, BondType.BondFunction.FLAT_BOTTOM_HARMONIC, flatBottom));
