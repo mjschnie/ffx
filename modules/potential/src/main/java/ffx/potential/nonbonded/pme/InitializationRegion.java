@@ -46,6 +46,7 @@ import static org.apache.commons.math3.util.FastMath.max;
 import edu.rit.pj.IntegerForLoop;
 import edu.rit.pj.IntegerSchedule;
 import edu.rit.pj.ParallelRegion;
+import edu.rit.pj.ParallelTeam;
 
 import ffx.crystal.Crystal;
 import ffx.crystal.SymOp;
@@ -219,6 +220,23 @@ public class InitializationRegion extends ParallelRegion {
         this.torque = torque;
         this.lambdaGrad = lambdaGrad;
         this.lambdaTorque = lambdaTorque;
+    }
+
+    /**
+     * Execute the InitializationRegion with the passed ParallelTeam.
+     * @param parallelTeam The ParallelTeam instance to execute with.
+     */
+    public void executeWith(ParallelTeam parallelTeam) {
+        try {
+            parallelTeam.execute(this);
+        } catch (RuntimeException e) {
+            String message = "RuntimeException expanding coordinates and rotating multipoles.\n";
+            logger.log(Level.WARNING, message, e);
+            throw e;
+        } catch (Exception e) {
+            String message = "Fatal exception expanding coordinates and rotating multipoles.\n";
+            logger.log(Level.SEVERE, message, e);
+        }
     }
 
     @Override

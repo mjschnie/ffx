@@ -43,6 +43,7 @@ import java.util.logging.Logger;
 import edu.rit.pj.IntegerForLoop;
 import edu.rit.pj.IntegerSchedule;
 import edu.rit.pj.ParallelRegion;
+import edu.rit.pj.ParallelTeam;
 import edu.rit.pj.reduction.SharedDoubleArray;
 
 import ffx.potential.bonded.Atom;
@@ -101,25 +102,40 @@ public class DirectRegion extends ParallelRegion {
     }
 
     public void init(Atom[] atoms, double[] polarizability, double[][][] globalMultipole, double[][] cartMultipolePhi,
-                     double[][][] inducedDipole, double[][][] inducedDipoleCR,
-                     double[][] directDipole, double[][] directDipoleCR,
                      double[][][] field, double[][][] fieldCR,
                      boolean generalizedKirkwoodTerm, GeneralizedKirkwood generalizedKirkwood,
-                     EwaldParameters ewaldParameters) {
+                     EwaldParameters ewaldParameters,
+                     double[][][] inducedDipole, double[][][] inducedDipoleCR,
+                     double[][] directDipole, double[][] directDipoleCR) {
+        // Input
         this.atoms = atoms;
         this.polarizability = polarizability;
         this.globalMultipole = globalMultipole;
         this.cartMultipolePhi = cartMultipolePhi;
-        this.inducedDipole = inducedDipole;
-        this.inducedDipoleCR = inducedDipoleCR;
-        this.directDipole = directDipole;
-        this.directDipoleCR = directDipoleCR;
         this.field = field;
         this.fieldCR = fieldCR;
         this.generalizedKirkwoodTerm = generalizedKirkwoodTerm;
         this.generalizedKirkwood = generalizedKirkwood;
         this.aewald = ewaldParameters.aewald;
         this.aewald3 = ewaldParameters.aewald3;
+        // Output
+        this.inducedDipole = inducedDipole;
+        this.inducedDipoleCR = inducedDipoleCR;
+        this.directDipole = directDipole;
+        this.directDipoleCR = directDipoleCR;
+    }
+
+    /**
+     * Execute the DirectRegion with the passed ParallelTeam.
+     * @param parallelTeam The ParallelTeam instance to execute with.
+     */
+    public void executeWith(ParallelTeam parallelTeam) {
+        try {
+            parallelTeam.execute(this);
+        } catch (Exception e) {
+            String message = " Exception computing direct induced dipoles.\n";
+            logger.log(Level.WARNING, message, e);
+        }
     }
 
     @Override

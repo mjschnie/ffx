@@ -95,13 +95,9 @@ public class CavitationRegion extends ParallelRegion {
     private double[] r;
     private double ecav;
     private double esurf;
-    private boolean lambdaTerm;
     private AtomicDoubleArray3D grad;
-    private AtomicDoubleArray3D lambdaGrad;
     private double surfaceTension;
     private boolean doVolume;
-    private double lPow;
-    private double dlPow;
 
     /**
      * This class is a port of the Cavitation code in TINKER.
@@ -115,16 +111,14 @@ public class CavitationRegion extends ParallelRegion {
      * @param use
      * @param neighborLists
      * @param grad
-     * @param lambdaGrad
      * @param nt
      * @param probe
-     * @param lambdaTerm
      * @param surfaceTension
      */
     public CavitationRegion(Atom[] atoms, double[] x, double[] y, double[] z,
                             boolean[] use, int[][][] neighborLists,
-                            AtomicDoubleArray3D grad, AtomicDoubleArray3D lambdaGrad,
-                            int nt, double probe, boolean lambdaTerm, double surfaceTension) {
+                            AtomicDoubleArray3D grad,
+                            int nt, double probe, double surfaceTension) {
         this.atoms = atoms;
         this.nAtoms = atoms.length;
         this.x = x;
@@ -133,9 +127,7 @@ public class CavitationRegion extends ParallelRegion {
         this.use = use;
         this.neighborLists = neighborLists;
         this.probe = probe;
-        this.lambdaTerm = lambdaTerm;
         this.grad = grad;
-        this.lambdaGrad = lambdaGrad;
         this.surfaceTension = surfaceTension;
 
         atomOverlapLoop = new AtomOverlapLoop[nt];
@@ -148,11 +140,6 @@ public class CavitationRegion extends ParallelRegion {
         }
         sharedCavitation = new SharedDouble();
         init();
-    }
-
-    public void setLamabda(double lPow, double dlPow) {
-        this.lPow = lPow;
-        this.dlPow = dlPow;
     }
 
     public double getEnergy() {
@@ -396,8 +383,6 @@ public class CavitationRegion extends ParallelRegion {
 
         private double thec = 0;
         private IndexedDouble[] arci;
-        //        private final double[][] dArea;
-//        private final double[][] ldArea;
         private boolean[] omit;
         private double[] xc;
         private double[] yc;
@@ -430,15 +415,12 @@ public class CavitationRegion extends ParallelRegion {
         private final static double pix4 = 4.0 * PI;
         private final static double pid2 = PI / 2.0;
         private final static double eps = 1.0e-8;
-
         public long time;
         // Extra padding to avert cache interference.
         private long pad0, pad1, pad2, pad3, pad4, pad5, pad6, pad7;
         private long pad8, pad9, pada, padb, padc, padd, pade, padf;
 
         CavitationLoop() {
-//            dArea = new double[3][];
-//            ldArea = new double[3][];
             allocateMemory(maxarc);
         }
 
@@ -472,14 +454,6 @@ public class CavitationRegion extends ParallelRegion {
         public void start() {
             time = -System.nanoTime();
             threadID = getThreadIndex();
-//            dArea[0] = grad[threadID][0];
-//            dArea[1] = grad[threadID][1];
-//            dArea[2] = grad[threadID][2];
-//            if (lambdaTerm) {
-//                ldArea[0] = lambdaGrad[threadID][0];
-//                ldArea[1] = lambdaGrad[threadID][1];
-//                ldArea[2] = lambdaGrad[threadID][2];
-//            }
             ecav = 0;
             fill(ider, 0);
             fill(sign_yder, 0);
@@ -559,36 +533,8 @@ public class CavitationRegion extends ParallelRegion {
                     int in = intag[k];
                     double t1 = arcsum * rrisq * (bsqk - rrisq + r[in] * r[in])
                             / (rri2 * bsqk * bk);
-                    grad.sub(threadID, ir,
-                            lPow * txk * t1 * wght,
-                            lPow * tyk * t1 * wght,
-                            lPow * tzk * t1 * wght);
-                    grad.add(threadID, in,
-                            lPow * txk * t1 * wght,
-                            lPow * tyk * t1 * wght,
-                            lPow * tzk * t1 * wght);
-//                    dArea[0][ir] -= lPow * txk * t1 * wght;
-//                    dArea[1][ir] -= lPow * tyk * t1 * wght;
-//                    dArea[2][ir] -= lPow * tzk * t1 * wght;
-//                    dArea[0][in] += lPow * txk * t1 * wght;
-//                    dArea[1][in] += lPow * tyk * t1 * wght;
-//                    dArea[2][in] += lPow * tzk * t1 * wght;
-                    if (lambdaTerm) {
-                        lambdaGrad.sub(threadID, ir,
-                                dlPow * txk * t1 * wght,
-                                dlPow * tyk * t1 * wght,
-                                dlPow * tzk * t1 * wght);
-                        lambdaGrad.add(threadID, in,
-                                dlPow * txk * t1 * wght,
-                                dlPow * tyk * t1 * wght,
-                                dlPow * tzk * t1 * wght);
-//                        ldArea[0][ir] -= dlPow * txk * t1 * wght;
-//                        ldArea[1][ir] -= dlPow * tyk * t1 * wght;
-//                        ldArea[2][ir] -= dlPow * tzk * t1 * wght;
-//                        ldArea[0][in] += dlPow * txk * t1 * wght;
-//                        ldArea[1][in] += dlPow * tyk * t1 * wght;
-//                        ldArea[2][in] += dlPow * tzk * t1 * wght;
-                    }
+                    grad.sub(threadID, ir, txk * t1 * wght, tyk * t1 * wght, tzk * t1 * wght);
+                    grad.add(threadID, in, txk * t1 * wght, tyk * t1 * wght, tzk * t1 * wght);
                 }
                 area[ir] = ib * pix2 + exang + arclen;
                 area[ir] = area[ir] % pix4;
@@ -790,36 +736,8 @@ public class CavitationRegion extends ParallelRegion {
                         int in = intag[k];
                         t1 = arcsum * rrisq * (bsqk - rrisq + r[in] * r[in])
                                 / (rri2 * bsqk * bk);
-                        grad.sub(threadID, ir,
-                                lPow * txk * t1 * wght,
-                                lPow * tyk * t1 * wght,
-                                lPow * tzk * t1 * wght);
-                        grad.add(threadID, in,
-                                lPow * txk * t1 * wght,
-                                lPow * tyk * t1 * wght,
-                                lPow * tzk * t1 * wght);
-//                        dArea[0][ir] -= lPow * txk * t1 * wght;
-//                        dArea[1][ir] -= lPow * tyk * t1 * wght;
-//                        dArea[2][ir] -= lPow * tzk * t1 * wght;
-//                        dArea[0][in] += lPow * txk * t1 * wght;
-//                        dArea[1][in] += lPow * tyk * t1 * wght;
-//                        dArea[2][in] += lPow * tzk * t1 * wght;
-                        if (lambdaTerm) {
-                            lambdaGrad.sub(threadID, ir,
-                                    dlPow * txk * t1 * wght,
-                                    dlPow * tyk * t1 * wght,
-                                    dlPow * tzk * t1 * wght);
-                            lambdaGrad.add(threadID, in,
-                                    dlPow * txk * t1 * wght,
-                                    dlPow * tyk * t1 * wght,
-                                    dlPow * tzk * t1 * wght);
-//                            ldArea[0][ir] -= dlPow * txk * t1 * wght;
-//                            ldArea[1][ir] -= dlPow * tyk * t1 * wght;
-//                            ldArea[2][ir] -= dlPow * tzk * t1 * wght;
-//                            ldArea[0][in] += dlPow * txk * t1 * wght;
-//                            ldArea[1][in] += dlPow * tyk * t1 * wght;
-//                            ldArea[2][in] += dlPow * tzk * t1 * wght;
-                        }
+                        grad.sub(threadID, ir, txk * t1 * wght, tyk * t1 * wght, tzk * t1 * wght);
+                        grad.add(threadID, in, txk * t1 * wght, tyk * t1 * wght, tzk * t1 * wght);
                     }
                     continue;
                 }
@@ -910,36 +828,8 @@ public class CavitationRegion extends ParallelRegion {
                         double day = axy * faca + ayy * facb + azy * facc;
                         double daz = azz * facc - axz * faca;
                         int in = intag[l];
-                        grad.add(threadID, ir,
-                                lPow * txk * t1 * wght,
-                                lPow * tyk * t1 * wght,
-                                lPow * tzk * t1 * wght);
-                        grad.sub(threadID, in,
-                                lPow * txk * t1 * wght,
-                                lPow * tyk * t1 * wght,
-                                lPow * tzk * t1 * wght);
-//                        dArea[0][ir] += lPow * dax * wght;
-//                        dArea[1][ir] += lPow * day * wght;
-//                        dArea[2][ir] += lPow * daz * wght;
-//                        dArea[0][in] -= lPow * dax * wght;
-//                        dArea[1][in] -= lPow * day * wght;
-//                        dArea[2][in] -= lPow * daz * wght;
-                        if (lambdaTerm) {
-                            lambdaGrad.add(threadID, ir,
-                                    dlPow * txk * t1 * wght,
-                                    dlPow * tyk * t1 * wght,
-                                    dlPow * tzk * t1 * wght);
-                            lambdaGrad.sub(threadID, in,
-                                    dlPow * txk * t1 * wght,
-                                    dlPow * tyk * t1 * wght,
-                                    dlPow * tzk * t1 * wght);
-//                            ldArea[0][ir] += dlPow * dax * wght;
-//                            ldArea[1][ir] += dlPow * day * wght;
-//                            ldArea[2][ir] += dlPow * daz * wght;
-//                            ldArea[0][in] -= dlPow * dax * wght;
-//                            ldArea[1][in] -= dlPow * day * wght;
-//                            ldArea[2][in] -= dlPow * daz * wght;
-                        }
+                        grad.add(threadID, ir, txk * t1 * wght, tyk * t1 * wght, tzk * t1 * wght);
+                        grad.sub(threadID, in, txk * t1 * wght, tyk * t1 * wght, tzk * t1 * wght);
                     }
 
                 }
@@ -948,36 +838,8 @@ public class CavitationRegion extends ParallelRegion {
                     int in = intag[k];
                     t1 = arcsum * rrisq * (bsqk - rrisq + r[in] * r[in])
                             / (rri2 * bsqk * bk);
-                    grad.sub(threadID, ir,
-                            lPow * txk * t1 * wght,
-                            lPow * tyk * t1 * wght,
-                            lPow * tzk * t1 * wght);
-                    grad.add(threadID, in,
-                            lPow * txk * t1 * wght,
-                            lPow * tyk * t1 * wght,
-                            lPow * tzk * t1 * wght);
-//                    dArea[0][ir] -= lPow * txk * t1 * wght;
-//                    dArea[1][ir] -= lPow * tyk * t1 * wght;
-//                    dArea[2][ir] -= lPow * tzk * t1 * wght;
-//                    dArea[0][in] += lPow * txk * t1 * wght;
-//                    dArea[1][in] += lPow * tyk * t1 * wght;
-//                    dArea[2][in] += lPow * tzk * t1 * wght;
-                    if (lambdaTerm) {
-                        lambdaGrad.sub(threadID, ir,
-                                dlPow * txk * t1 * wght,
-                                dlPow * tyk * t1 * wght,
-                                dlPow * tzk * t1 * wght);
-                        lambdaGrad.add(threadID, in,
-                                dlPow * txk * t1 * wght,
-                                dlPow * tyk * t1 * wght,
-                                dlPow * tzk * t1 * wght);
-//                        ldArea[0][ir] -= dlPow * txk * t1 * wght;
-//                        ldArea[1][ir] -= dlPow * tyk * t1 * wght;
-//                        ldArea[2][ir] -= dlPow * tzk * t1 * wght;
-//                        ldArea[0][in] += dlPow * txk * t1 * wght;
-//                        ldArea[1][in] += dlPow * tyk * t1 * wght;
-//                        ldArea[2][in] += dlPow * tzk * t1 * wght;
-                    }
+                    grad.sub(threadID, ir, txk * t1 * wght, tyk * t1 * wght, tzk * t1 * wght);
+                    grad.add(threadID, in, txk * t1 * wght, tyk * t1 * wght, tzk * t1 * wght);
                 }
             }
             if (arclen == 0.0) {

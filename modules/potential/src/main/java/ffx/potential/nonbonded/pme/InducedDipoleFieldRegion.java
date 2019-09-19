@@ -184,7 +184,9 @@ public class InducedDipoleFieldRegion extends ParallelRegion {
                      double[] ipdamp, double[] thole, double[][][] coordinates,
                      RealSpaceNeighborParameters realSpaceNeighborParameters, double[][][] inducedDipole, double[][][] inducedDipoleCR,
                      boolean reciprocalSpaceTerm, ReciprocalSpace reciprocalSpace, LambdaMode lambdaMode,
-                     EwaldParameters ewaldParameters, double[][][] field, double[][][] fieldCR, PMETimings pmeTimings) {
+                     EwaldParameters ewaldParameters,
+                     double[][][] field, double[][][] fieldCR, PMETimings pmeTimings) {
+        // Input
         this.atoms = atoms;
         this.crystal = crystal;
         this.use = use;
@@ -203,14 +205,32 @@ public class InducedDipoleFieldRegion extends ParallelRegion {
         this.aewald = ewaldParameters.aewald;
         this.an0 = ewaldParameters.an0;
         this.an1 = ewaldParameters.an1;
-        this.realSpaceSCFTotal = pmeTimings.realSpaceSCFTotal;
-        this.realSpaceSCFTime = pmeTimings.realSpaceSCFTime;
+        // Output
         this.field = field;
         this.fieldCR = fieldCR;
+        this.realSpaceSCFTotal = pmeTimings.realSpaceSCFTotal;
+        this.realSpaceSCFTime = pmeTimings.realSpaceSCFTime;
     }
 
     public long getRealSpaceSCFTotal() {
         return realSpaceSCFTotal;
+    }
+
+    /**
+     * Execute the InducedDipoleFieldRegion with the passed ParallelTeam.
+     * @param parallelTeam The ParallelTeam instance to execute with.
+     */
+    public void executeWith(ParallelTeam parallelTeam) {
+        try {
+            parallelTeam.execute(this);
+        } catch (RuntimeException e) {
+            String message = "Runtime exception computing the induced reciprocal space field.\n";
+            logger.log(Level.WARNING, message, e);
+            throw e;
+        } catch (Exception ex) {
+            String message = "Fatal exception computing the induced reciprocal space field.\n";
+            logger.log(Level.SEVERE, message, ex);
+        }
     }
 
     @Override

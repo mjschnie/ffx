@@ -37,6 +37,11 @@
 //******************************************************************************
 package ffx.numerics.atomic;
 
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+import edu.rit.pj.IntegerForLoop;
+import edu.rit.pj.ParallelRegion;
 import edu.rit.pj.ParallelTeam;
 
 import ffx.numerics.atomic.AtomicDoubleArray.AtomicDoubleArrayImpl;
@@ -48,6 +53,8 @@ import ffx.numerics.atomic.AtomicDoubleArray.AtomicDoubleArrayImpl;
  * @since 1.0
  */
 public class AtomicDoubleArray3D {
+
+    private static final Logger logger = Logger.getLogger(AtomicDoubleArray3D.class.getName());
 
     /**
      * Each dimension is stored in its own AtomicDoubleArray.
@@ -125,6 +132,34 @@ public class AtomicDoubleArray3D {
     }
 
     /**
+     * Reset the double array to Zero.
+     *
+     * @param parallelTeam a ParallelTeam.
+     * @param lb           a int.
+     * @param ub           a int.
+     */
+    public void reset(ParallelTeam parallelTeam, int lb, int ub) {
+        try {
+            parallelTeam.execute(new ParallelRegion() {
+                @Override
+                public void run() throws Exception {
+                    int nThreads = parallelTeam.getThreadCount();
+                    execute(0, nThreads - 1, new IntegerForLoop() {
+                        @Override
+                        public void run(int first, int last) {
+                            for (int i = first; i <= last; i++) {
+                                reset(i, lb, ub);
+                            }
+                        }
+                    });
+                }
+            });
+        } catch (Exception e) {
+            logger.log(Level.WARNING, " Exception resetting an AtomicDoubleArray3D", e);
+        }
+    }
+
+    /**
      * Add value to the double array at the specified index.
      *
      * @param threadID a int.
@@ -165,6 +200,32 @@ public class AtomicDoubleArray3D {
         atomicDoubleArray[0].reduce(lb, ub);
         atomicDoubleArray[1].reduce(lb, ub);
         atomicDoubleArray[2].reduce(lb, ub);
+    }
+
+    /**
+     * Perform reduction between the given lower bound (lb) and upper bound (up)
+     * if necessary.
+     *
+     * @param lb a int.
+     * @param ub a int.
+     */
+    public void reduce(ParallelTeam parallelTeam, int lb, int ub) {
+
+        try {
+            parallelTeam.execute(new ParallelRegion() {
+                @Override
+                public void run() throws Exception {
+                    execute(lb, ub, new IntegerForLoop() {
+                        @Override
+                        public void run(int first, int last) {
+                            reduce(first, last);
+                        }
+                    });
+                }
+            });
+        } catch (Exception e) {
+            logger.log(Level.WARNING, " Exception reducing an AtomicDoubleArray3D", e);
+        }
     }
 
     /**

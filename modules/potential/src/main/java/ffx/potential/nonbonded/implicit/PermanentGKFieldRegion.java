@@ -110,7 +110,7 @@ public class PermanentGKFieldRegion extends ParallelRegion {
     /**
      * Shared arrays for computation of the GK field for each symmetry operator.
      */
-    public SharedDoubleArray[] sharedGKField;
+    private SharedDoubleArray[] sharedGKField;
 
     /**
      * Empirical constant that controls the GK cross-term.

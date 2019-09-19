@@ -92,25 +92,11 @@ public class DispersionRegion extends ParallelRegion {
     /**
      * Boolean flag to indicate GK will be scaled by the lambda state variable.
      */
-    private boolean lambdaTerm;
     private boolean gradient = false;
-    /**
-     * lPow equals lambda^polarizationLambdaExponent, where polarizationLambdaExponent also used by PME.
-     */
-    private double lPow = 1.0;
-    /**
-     * First derivative of lPow with respect to l.
-     */
-    private double dlPow = 0.0;
     /**
      * Gradient array for each thread.
      */
     private AtomicDoubleArray3D grad;
-    /**
-     * Lambda gradient array for each thread (dU/dX/dL)
-     */
-    private AtomicDoubleArray3D lambdaGrad;
-
     /**
      * Radius of each atom for calculation of dispersion energy.
      */
@@ -156,9 +142,7 @@ public class DispersionRegion extends ParallelRegion {
 
     public void init(Atom[] atoms, Crystal crystal, boolean[] use, int[][][] neighborLists,
                      double[] x, double[] y, double[] z, double cut2,
-                     boolean gradient, boolean lambdaTerm,
-                     double lPow, double dlPow,
-                     AtomicDoubleArray3D grad, AtomicDoubleArray3D lambdaGrad) {
+                     boolean gradient, AtomicDoubleArray3D grad) {
         this.atoms = atoms;
         this.crystal = crystal;
         this.use = use;
@@ -168,11 +152,7 @@ public class DispersionRegion extends ParallelRegion {
         this.z = z;
         this.cut2 = cut2;
         this.gradient = gradient;
-        this.lambdaTerm = lambdaTerm;
-        this.lPow = lPow;
-        this.dlPow = dlPow;
         this.grad = grad;
-        this.lambdaGrad = lambdaGrad;
     }
 
     public double getEnergy() {
@@ -529,24 +509,8 @@ public class DispersionRegion extends ParallelRegion {
                     double dedx = de * xr;
                     double dedy = de * yr;
                     double dedz = de * zr;
-//                    gX[i] += lPow * dedx;
-//                    gY[i] += lPow * dedy;
-//                    gZ[i] += lPow * dedz;
-//                    gX[k] -= lPow * dedx;
-//                    gY[k] -= lPow * dedy;
-//                    gZ[k] -= lPow * dedz;
-                    grad.add(threadID, i, lPow * dedx, lPow * dedy, lPow * dedz);
-                    grad.sub(threadID, k, lPow * dedx, lPow * dedy, lPow * dedz);
-                    if (lambdaTerm) {
-//                        lgX[i] += dlPow * dedx;
-//                        lgY[i] += dlPow * dedy;
-//                        lgZ[i] += dlPow * dedz;
-//                        lgX[k] -= dlPow * dedx;
-//                        lgY[k] -= dlPow * dedy;
-//                        lgZ[k] -= dlPow * dedz;
-                        lambdaGrad.add(threadID, i, dlPow * dedx, dlPow * dedy, dlPow * dedz);
-                        lambdaGrad.sub(threadID, k, dlPow * dedx, dlPow * dedy, dlPow * dedz);
-                    }
+                    grad.add(threadID, i,  dedx, dedy, dedz);
+                    grad.sub(threadID, k, dedx, dedy, dedz);
                 }
             }
             return sum;

@@ -45,6 +45,7 @@ import static org.apache.commons.math3.util.FastMath.sqrt;
 import edu.rit.pj.IntegerForLoop;
 import edu.rit.pj.IntegerSchedule;
 import edu.rit.pj.ParallelRegion;
+import edu.rit.pj.ParallelTeam;
 
 import ffx.numerics.atomic.AtomicDoubleArray3D;
 import ffx.potential.bonded.Atom;
@@ -133,6 +134,19 @@ public class ReduceRegion extends ParallelRegion {
         this.torque = torque;
         this.lambdaGrad = lambdaGrad;
         this.lambdaTorque = lambdaTorque;
+    }
+
+    /**
+     * Execute the ReduceRegion with the passed ParallelTeam.
+     * @param parallelTeam The ParallelTeam instance to execute with.
+     */
+    public void excuteWith(ParallelTeam parallelTeam) {
+        try {
+            parallelTeam.execute(this);
+        } catch (Exception e) {
+            String message = "Exception calculating torques.";
+            logger.log(Level.SEVERE, message, e);
+        }
     }
 
     @Override

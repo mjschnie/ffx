@@ -43,6 +43,7 @@ import java.util.logging.Logger;
 import edu.rit.pj.IntegerForLoop;
 import edu.rit.pj.IntegerSchedule;
 import edu.rit.pj.ParallelRegion;
+import edu.rit.pj.ParallelTeam;
 import edu.rit.pj.reduction.SharedDoubleArray;
 
 import ffx.potential.bonded.Atom;
@@ -92,21 +93,36 @@ public class InducedDipoleFieldReduceRegion extends ParallelRegion {
     }
 
     public void init(Atom[] atoms, double[][][] inducedDipole, double[][][] inducedDipoleCR,
-                     double[][] cartesianDipolePhi, double[][] cartesianDipolePhiCR,
-                     double[][][] field, double[][][] fieldCR,
                      boolean generalizedKirkwoodTerm, GeneralizedKirkwood generalizedKirkwood,
-                     EwaldParameters ewaldParameters) {
+                     EwaldParameters ewaldParameters,
+                     double[][] cartesianDipolePhi, double[][] cartesianDipolePhiCR,
+                     double[][][] field, double[][][] fieldCR) {
+        // Input
         this.atoms = atoms;
         this.inducedDipole = inducedDipole;
         this.inducedDipoleCR = inducedDipoleCR;
-        this.cartesianDipolePhi = cartesianDipolePhi;
-        this.cartesianDipolePhiCR = cartesianDipolePhiCR;
-        this.field = field;
-        this.fieldCR = fieldCR;
         this.generalizedKirkwoodTerm = generalizedKirkwoodTerm;
         this.generalizedKirkwood = generalizedKirkwood;
         this.aewald = ewaldParameters.aewald;
         this.aewald3 = ewaldParameters.aewald3;
+        // Output
+        this.cartesianDipolePhi = cartesianDipolePhi;
+        this.cartesianDipolePhiCR = cartesianDipolePhiCR;
+        this.field = field;
+        this.fieldCR = fieldCR;
+    }
+
+    /**
+     * Execute the InducedDipoleFieldReduceRegion with the passed ParallelTeam.
+     * @param parallelTeam The ParallelTeam instance to execute with.
+     */
+    public void executeWith(ParallelTeam parallelTeam) {
+        try {
+            parallelTeam.execute(this);
+        } catch (Exception e) {
+            String message = " Exception computing induced dipole field.\n";
+            logger.log(Level.WARNING, message, e);
+        }
     }
 
     @Override
