@@ -348,7 +348,6 @@ public class VanDerWaals implements MaskingInterface,
         } catch (Exception e) {
             logger.info(format(" Unrecognized ARRAY-REDUCTION %s; defaulting to %s", value, atomicDoubleArrayImpl));
         }
-        logger.info(format("  Using %s arrays.", atomicDoubleArrayImpl.toString()));
 
         // Allocate coordinate arrays and set up reduction indices and values.
         initAtomArrays();
@@ -1426,7 +1425,7 @@ public class VanDerWaals implements MaskingInterface,
             }
 
             // Log timings.
-            if (threadIndex == 0 && logger.isLoggable(Level.FINER)) {
+            if (threadIndex == 0 && logger.isLoggable(Level.FINE)) {
                 double total = (initializationTotal + vdwTotal + reductionTotal) * 1e-9;
                 logger.fine(format("\n Van der Waals: %7.4f (sec)", total));
                 logger.fine(" Thread    Init    Energy  Reduce  Total     Counts");

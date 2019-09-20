@@ -45,6 +45,7 @@ import edu.rit.pj.ParallelRegion;
 import edu.rit.pj.ParallelTeam;
 
 import ffx.numerics.atomic.AtomicDoubleArray.AtomicDoubleArrayImpl;
+import static ffx.numerics.atomic.AtomicDoubleArray.atomicDoubleArrayFactory;
 
 /**
  * Implementation of maintaining a 3D double array that is operated on by multiple threads.
@@ -81,23 +82,9 @@ public class AtomicDoubleArray3D {
      */
     public AtomicDoubleArray3D(AtomicDoubleArrayImpl atomicDoubleArrayImpl, int size, int nThreads) {
         atomicDoubleArray = new AtomicDoubleArray[3];
-        switch (atomicDoubleArrayImpl) {
-            case ADDER:
-                atomicDoubleArray[0] = new AdderDoubleArray(size);
-                atomicDoubleArray[1] = new AdderDoubleArray(size);
-                atomicDoubleArray[2] = new AdderDoubleArray(size);
-                break;
-            case PJ:
-                atomicDoubleArray[0] = new PJDoubleArray(size);
-                atomicDoubleArray[1] = new PJDoubleArray(size);
-                atomicDoubleArray[2] = new PJDoubleArray(size);
-                break;
-            default:
-            case MULTI:
-                atomicDoubleArray[0] = new MultiDoubleArray(nThreads, size);
-                atomicDoubleArray[1] = new MultiDoubleArray(nThreads, size);
-                atomicDoubleArray[2] = new MultiDoubleArray(nThreads, size);
-        }
+        atomicDoubleArray[0] = atomicDoubleArrayFactory(atomicDoubleArrayImpl, nThreads, size);
+        atomicDoubleArray[1] = atomicDoubleArrayFactory(atomicDoubleArrayImpl, nThreads, size);
+        atomicDoubleArray[2] = atomicDoubleArrayFactory(atomicDoubleArrayImpl, nThreads, size);
     }
 
     public AtomicDoubleArray3D(AtomicDoubleArray x, AtomicDoubleArray y, AtomicDoubleArray z) {
@@ -261,4 +248,15 @@ public class AtomicDoubleArray3D {
         return atomicDoubleArray[2].get(index);
     }
 
+    /**
+     * Get the value of the array at the specified index (usually subsequent to
+     * calling the <code>reduce</code> method.
+     *
+     * @param dim   Dimension [0, 1, 2]
+     * @param index a int.
+     * @return a double.
+     */
+    public double get(int dim, int index) {
+        return atomicDoubleArray[dim].get(index);
+    }
 }

@@ -55,6 +55,19 @@ public interface AtomicDoubleArray {
         ADDER, MULTI, PJ
     }
 
+    static AtomicDoubleArray atomicDoubleArrayFactory(AtomicDoubleArrayImpl atomicDoubleArrayImpl,
+                                                              int threads, int size) {
+        switch (atomicDoubleArrayImpl) {
+            case ADDER:
+                return new AdderDoubleArray(size);
+            case PJ:
+                return new PJDoubleArray(size);
+            case MULTI:
+            default:
+                return new MultiDoubleArray(threads, size);
+        }
+    }
+
     /**
      * Ensure the AtomicDoubleArray instance is greater than or equal to size.
      *

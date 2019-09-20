@@ -46,6 +46,7 @@ import edu.rit.pj.ParallelRegion;
 import edu.rit.pj.ParallelTeam;
 import edu.rit.pj.reduction.SharedDoubleArray;
 
+import ffx.numerics.atomic.AtomicDoubleArray3D;
 import ffx.potential.bonded.Atom;
 import ffx.potential.nonbonded.GeneralizedKirkwood;
 import ffx.potential.nonbonded.ParticleMeshEwaldCart.EwaldParameters;
@@ -69,13 +70,14 @@ public class InducedDipoleFieldReduceRegion extends ParallelRegion {
     private double[][] cartesianDipolePhi;
     private double[][] cartesianDipolePhiCR;
     /**
-     * Field array for each thread. [threadID][X/Y/Z][atomID]
+     * Field array.
      */
-    private double[][][] field;
+    private AtomicDoubleArray3D field;
     /**
-     * Chain rule field array for each thread. [threadID][X/Y/Z][atomID]
+     * Chain rule field array.
      */
-    private double[][][] fieldCR;
+    private AtomicDoubleArray3D fieldCR;
+
     /**
      * Flag to indicate use of generalized Kirkwood.
      */
@@ -96,7 +98,7 @@ public class InducedDipoleFieldReduceRegion extends ParallelRegion {
                      boolean generalizedKirkwoodTerm, GeneralizedKirkwood generalizedKirkwood,
                      EwaldParameters ewaldParameters,
                      double[][] cartesianDipolePhi, double[][] cartesianDipolePhiCR,
-                     double[][][] field, double[][][] fieldCR) {
+                     AtomicDoubleArray3D field, AtomicDoubleArray3D fieldCR) {
         // Input
         this.atoms = atoms;
         this.inducedDipole = inducedDipole;
@@ -150,32 +152,9 @@ public class InducedDipoleFieldReduceRegion extends ParallelRegion {
 
         @Override
         public void run(int lb, int ub) throws Exception {
+            int threadID = getThreadIndex();
             final double[][] induced0 = inducedDipole[0];
             final double[][] inducedCR0 = inducedDipoleCR[0];
-
-            // Reduce the real space field.
-            for (int i = lb; i <= ub; i++) {
-                double fx = 0.0;
-                double fy = 0.0;
-                double fz = 0.0;
-                double fxCR = 0.0;
-                double fyCR = 0.0;
-                double fzCR = 0.0;
-                for (int j = 1; j < maxThreads; j++) {
-                    fx += field[j][0][i];
-                    fy += field[j][1][i];
-                    fz += field[j][2][i];
-                    fxCR += fieldCR[j][0][i];
-                    fyCR += fieldCR[j][1][i];
-                    fzCR += fieldCR[j][2][i];
-                }
-                field[0][0][i] += fx;
-                field[0][1][i] += fy;
-                field[0][2][i] += fz;
-                fieldCR[0][0][i] += fxCR;
-                fieldCR[0][1][i] += fyCR;
-                fieldCR[0][2][i] += fzCR;
-            }
             if (aewald > 0.0) {
                 // Add the self and reciprocal space fields to the real space field.
                 for (int i = lb; i <= ub; i++) {
@@ -189,28 +168,21 @@ public class InducedDipoleFieldReduceRegion extends ParallelRegion {
                     double fxCR = aewald3 * dipoleCRi[0] - phiCRi[t100];
                     double fyCR = aewald3 * dipoleCRi[1] - phiCRi[t010];
                     double fzCR = aewald3 * dipoleCRi[2] - phiCRi[t001];
-                    field[0][0][i] += fx;
-                    field[0][1][i] += fy;
-                    field[0][2][i] += fz;
-                    fieldCR[0][0][i] += fxCR;
-                    fieldCR[0][1][i] += fyCR;
-                    fieldCR[0][2][i] += fzCR;
+                    field.add(threadID, i, fx, fy, fz);
+                    fieldCR.add(threadID, i, fxCR, fyCR, fzCR);
                 }
             }
             if (generalizedKirkwoodTerm) {
-                SharedDoubleArray[] gkField = generalizedKirkwood.sharedGKField;
-                SharedDoubleArray[] gkFieldCR = generalizedKirkwood.sharedGKFieldCR;
-
+                AtomicDoubleArray3D gkField = generalizedKirkwood.sharedGKField;
+                AtomicDoubleArray3D gkFieldCR = generalizedKirkwood.sharedGKFieldCR;
                 // Add the GK reaction field to the intramolecular field.
                 for (int i = lb; i <= ub; i++) {
-                    field[0][0][i] += gkField[0].get(i);
-                    field[0][1][i] += gkField[1].get(i);
-                    field[0][2][i] += gkField[2].get(i);
-                    fieldCR[0][0][i] += gkFieldCR[0].get(i);
-                    fieldCR[0][1][i] += gkFieldCR[1].get(i);
-                    fieldCR[0][2][i] += gkFieldCR[2].get(i);
+                    field.add(threadID, i, gkField.getX(i), gkField.getY(i), gkField.getZ(i));
+                    fieldCR.add(threadID, i, gkFieldCR.getX(i), gkFieldCR.getY(i), gkFieldCR.getZ(i));
                 }
             }
+            field.reduce(lb, ub);
+            fieldCR.reduce(lb, ub);
         }
     }
 }

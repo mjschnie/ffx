@@ -62,6 +62,7 @@ import edu.rit.util.Range;
 
 import ffx.crystal.Crystal;
 import ffx.crystal.SymOp;
+import ffx.numerics.atomic.AtomicDoubleArray3D;
 import ffx.numerics.multipole.MultipoleTensor;
 import ffx.numerics.multipole.MultipoleTensor.OPERATOR;
 import ffx.numerics.multipole.MultipoleTensorQI;
@@ -3466,11 +3467,11 @@ public class ParticleMeshEwaldQI extends ParticleMeshEwald {
                      * Initialize the electric field to the direct field plus
                      * the permanent GK reaction field.
                      */
-                    SharedDoubleArray gkField[] = generalizedKirkwood.sharedGKField;
+                    AtomicDoubleArray3D gkField = generalizedKirkwood.sharedGKField;
                     for (int i = lb; i <= ub; i++) {
-                        double fx = gkField[0].get(i);
-                        double fy = gkField[1].get(i);
-                        double fz = gkField[2].get(i);
+                        double fx = gkField.getX(i);
+                        double fy = gkField.getY(i);
+                        double fz = gkField.getZ(i);
                         field[0][0][i] += fx;
                         field[0][1][i] += fy;
                         field[0][2][i] += fz;
@@ -3634,18 +3635,18 @@ public class ParticleMeshEwaldQI extends ParticleMeshEwald {
                     }
                 }
                 if (generalizedKirkwoodTerm) {
-                    SharedDoubleArray gkField[] = generalizedKirkwood.sharedGKField;
-                    SharedDoubleArray gkFieldCR[] = generalizedKirkwood.sharedGKFieldCR;
+                    AtomicDoubleArray3D gkField = generalizedKirkwood.sharedGKField;
+                    AtomicDoubleArray3D gkFieldCR = generalizedKirkwood.sharedGKFieldCR;
                     /**
                      * Add the GK reaction field to the intramolecular field.
                      */
                     for (int i = lb; i <= ub; i++) {
-                        field[0][0][i] += gkField[0].get(i);
-                        field[0][1][i] += gkField[1].get(i);
-                        field[0][2][i] += gkField[2].get(i);
-                        fieldCR[0][0][i] += gkFieldCR[0].get(i);
-                        fieldCR[0][1][i] += gkFieldCR[1].get(i);
-                        fieldCR[0][2][i] += gkFieldCR[2].get(i);
+                        field[0][0][i] += gkField.getX(i);
+                        field[0][1][i] += gkField.getY(i);
+                        field[0][2][i] += gkField.getZ(i);
+                        fieldCR[0][0][i] += gkFieldCR.getX(i);
+                        fieldCR[0][1][i] += gkFieldCR.getY(i);
+                        fieldCR[0][2][i] += gkFieldCR.getZ(i);
                     }
                     if (esvTerm) {
                         throw new UnsupportedOperationException();    // TODO: Handle unscaled field.
@@ -7753,18 +7754,18 @@ public class ParticleMeshEwaldQI extends ParticleMeshEwald {
                     }
                 }
                 if (generalizedKirkwoodTerm) {
-                    SharedDoubleArray gkField[] = generalizedKirkwood.sharedGKField;
-                    SharedDoubleArray gkFieldCR[] = generalizedKirkwood.sharedGKFieldCR;
+                    AtomicDoubleArray3D gkField = generalizedKirkwood.sharedGKField;
+                    AtomicDoubleArray3D gkFieldCR = generalizedKirkwood.sharedGKFieldCR;
                     /**
                      * Add the GK reaction field to the intramolecular field.
                      */
                     for (int i = lb; i <= ub; i++) {
-                        field[0][0][i] += gkField[0].get(i);
-                        field[0][1][i] += gkField[1].get(i);
-                        field[0][2][i] += gkField[2].get(i);
-                        fieldCR[0][0][i] += gkFieldCR[0].get(i);
-                        fieldCR[0][1][i] += gkFieldCR[1].get(i);
-                        fieldCR[0][2][i] += gkFieldCR[2].get(i);
+                        field[0][0][i] += gkField.getX(i);
+                        field[0][1][i] += gkField.getY(i);
+                        field[0][2][i] += gkField.getZ(i);
+                        fieldCR[0][0][i] += gkFieldCR.getX(i);
+                        fieldCR[0][1][i] += gkFieldCR.getY(i);
+                        fieldCR[0][2][i] += gkFieldCR.getZ(i);
                     }
                 }
                 if (esvTerm) {

@@ -4045,12 +4045,14 @@ public class ForceFieldEnergy implements CrystalPotential, LambdaInterface {
             // Define how the gradient will be accumulated.
             atomicDoubleArrayImpl = AtomicDoubleArrayImpl.MULTI;
             ForceField forceField = molecularAssembly.getForceField();
+
             String value = forceField.getString(ForceFieldString.ARRAY_REDUCTION, "MULTI");
             try {
                 atomicDoubleArrayImpl = AtomicDoubleArrayImpl.valueOf(toEnumForm(value));
             } catch (Exception e) {
                 logger.info(format(" Unrecognized ARRAY-REDUCTION %s; defaulting to %s", value, atomicDoubleArrayImpl));
             }
+            logger.fine(format("  Bonded using %s arrays.", atomicDoubleArrayImpl.toString()));
 
             grad = new AtomicDoubleArray3D(atomicDoubleArrayImpl, nAtoms, nThreads);
             if (lambdaTerm) {

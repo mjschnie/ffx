@@ -45,7 +45,6 @@ import static java.lang.String.format;
 import static java.util.Arrays.fill;
 
 import org.apache.commons.math3.optimization.general.LevenbergMarquardtOptimizer;
-import static org.apache.commons.math3.util.FastMath.acos;
 import static org.apache.commons.math3.util.FastMath.max;
 import static org.apache.commons.math3.util.FastMath.min;
 import static org.apache.commons.math3.util.FastMath.pow;
@@ -94,6 +93,8 @@ import ffx.potential.parameters.PolarizeType;
 import ffx.potential.utils.EnergyException;
 import ffx.utilities.StringUtils;
 import static ffx.numerics.special.Erf.erfc;
+import static ffx.potential.parameters.ForceField.ForceFieldString.ARRAY_REDUCTION;
+import static ffx.potential.parameters.ForceField.toEnumForm;
 import static ffx.potential.parameters.MultipoleType.t000;
 import static ffx.potential.parameters.MultipoleType.t001;
 import static ffx.potential.parameters.MultipoleType.t002;
@@ -299,22 +300,24 @@ public class ParticleMeshEwaldCart extends ParticleMeshEwald implements LambdaIn
     private final ReduceRegion reduceRegion;
     private final GeneralizedKirkwood generalizedKirkwood;
 
-    /**
-     * Field array for each thread. [threadID][X/Y/Z][atomID]
-     */
-    private double[][][] field;
-    /**
-     * Chain rule field array for each thread. [threadID][X/Y/Z][atomID]
-     */
-    private double[][][] fieldCR;
-
     private double[][] cartesianMultipolePhi;
     private double[][] cartesianDipolePhi;
     private double[][] cartesianDipolePhiCR;
     private double[][] vacuumDipolePhi;
     private double[][] vacuumDipolePhiCR;
 
-
+    /**
+     * AtomicDoubleArray implementation to use.
+     */
+    private AtomicDoubleArrayImpl atomicDoubleArrayImpl;
+    /**
+     * Field array for each thread. [threadID][X/Y/Z][atomID]
+     */
+    private AtomicDoubleArray3D field;
+    /**
+     * Chain rule field array for each thread. [threadID][X/Y/Z][atomID]
+     */
+    private AtomicDoubleArray3D fieldCR;
     /**
      * Gradient array for each thread. [threadID][X/Y/Z][atomID]
      */
@@ -402,6 +405,16 @@ public class ParticleMeshEwaldCart extends ParticleMeshEwald implements LambdaIn
         } catch (Exception e) {
             scfAlgorithm = SCFAlgorithm.CG;
         }
+
+        // Define how force arrays will be accumulated.
+        String value = forceField.getString(ARRAY_REDUCTION, "MULTI");
+        try {
+            atomicDoubleArrayImpl = AtomicDoubleArrayImpl.valueOf(toEnumForm(value));
+        } catch (Exception e) {
+            atomicDoubleArrayImpl = AtomicDoubleArrayImpl.MULTI;
+            logger.info(format(" Unrecognized ARRAY-REDUCTION %s; defaulting to %s", value, atomicDoubleArrayImpl));
+        }
+        logger.fine(format("  PME using %s arrays.", atomicDoubleArrayImpl.toString()));
 
         if (!scfAlgorithm.isSupported(Platform.FFX)) {
             // Can't know a-priori whether this is being constructed under an FFX or OpenMM ForceFieldEnergy, so fine logging.
@@ -609,12 +622,12 @@ public class ParticleMeshEwaldCart extends ParticleMeshEwald implements LambdaIn
             }
 
             // Initialize per-thread memory for collecting the gradient, torque, field and chain-rule field.
-            grad = new AtomicDoubleArray3D(AtomicDoubleArrayImpl.MULTI, nAtoms, maxThreads);
-            torque = new AtomicDoubleArray3D(AtomicDoubleArrayImpl.MULTI, nAtoms, maxThreads);
-            field = new double[maxThreads][3][nAtoms];
-            fieldCR = new double[maxThreads][3][nAtoms];
-            lambdaGrad = new AtomicDoubleArray3D(AtomicDoubleArrayImpl.MULTI, nAtoms, maxThreads);
-            lambdaTorque = new AtomicDoubleArray3D(AtomicDoubleArrayImpl.MULTI, nAtoms, maxThreads);
+            grad = new AtomicDoubleArray3D(atomicDoubleArrayImpl, nAtoms, maxThreads);
+            torque = new AtomicDoubleArray3D(atomicDoubleArrayImpl, nAtoms, maxThreads);
+            field = new AtomicDoubleArray3D(atomicDoubleArrayImpl, nAtoms, maxThreads);
+            fieldCR = new AtomicDoubleArray3D(atomicDoubleArrayImpl, nAtoms, maxThreads);
+            lambdaGrad = new AtomicDoubleArray3D(atomicDoubleArrayImpl, nAtoms, maxThreads);
+            lambdaTorque = new AtomicDoubleArray3D(atomicDoubleArrayImpl, nAtoms, maxThreads);
             isSoft = new boolean[nAtoms];
             use = new boolean[nAtoms];
 
@@ -1151,6 +1164,8 @@ public class ParticleMeshEwaldCart extends ParticleMeshEwald implements LambdaIn
             if (reciprocalSpaceTerm && ewaldParameters.aewald > 0.0) {
                 if (gradient && polarization == Polarization.DIRECT) {
                     reciprocalSpace.splineInducedDipoles(inducedDipole, inducedDipoleCR, use);
+                    field.reset(parallelTeam, 0, nAtoms - 1);
+                    fieldCR.reset(parallelTeam, 0, nAtoms - 1);
                     inducedDipoleFieldRegion.init(atoms, crystal, use, molecule,
                             ipdamp, thole, coordinates, realSpaceNeighborParameters,
                             inducedDipole, inducedDipoleCR, reciprocalSpaceTerm, reciprocalSpace,
@@ -1357,13 +1372,15 @@ public class ParticleMeshEwaldCart extends ParticleMeshEwald implements LambdaIn
                 reciprocalSpace.splinePermanentMultipoles(globalMultipole, 0, use);
             }
 
-            // The real space contribution can be calculated at the same time
-            // the reciprocal space convolution is being done.
+            field.reset(parallelTeam, 0, nAtoms - 1);
+            fieldCR.reset(parallelTeam, 0, nAtoms - 1);
             permanentFieldRegion.init(atoms, crystal, coordinates, globalMultipole,
                     inducedDipole, inducedDipoleCR, neighborLists,
                     scaleParameters, use, molecule, ipdamp, thole, ip11, lambdaMode,
                     reciprocalSpaceTerm, reciprocalSpace, ewaldParameters, pcgSolver,
                     permanentSchedule, realSpaceNeighborParameters, field, fieldCR, pmeTimings);
+            // The real space contribution can be calculated at the same time
+            // the reciprocal space convolution is being done.
             sectionTeam.execute(permanentFieldRegion);
 
             pmeTimings.realSpacePermTotal = permanentFieldRegion.getRealSpacePermTotal();
@@ -1405,6 +1422,8 @@ public class ParticleMeshEwaldCart extends ParticleMeshEwald implements LambdaIn
         if (reciprocalSpaceTerm && ewaldParameters.aewald > 0.0) {
             reciprocalSpace.splineInducedDipoles(inducedDipole, inducedDipoleCR, use);
         }
+        field.reset(parallelTeam, 0, nAtoms - 1);
+        fieldCR.reset(parallelTeam, 0, nAtoms - 1);
         inducedDipoleFieldRegion.init(atoms, crystal, use, molecule,
                 ipdamp, thole, coordinates, realSpaceNeighborParameters,
                 inducedDipole, inducedDipoleCR, reciprocalSpaceTerm, reciprocalSpace,
@@ -1622,11 +1641,13 @@ public class ParticleMeshEwaldCart extends ParticleMeshEwald implements LambdaIn
                 if (reciprocalSpaceTerm && ewaldParameters.aewald > 0.0) {
                     reciprocalSpace.splineInducedDipoles(inducedDipole, inducedDipoleCR, use);
                 }
+                field.reset(parallelTeam, 0, nAtoms - 1);
+                fieldCR.reset(parallelTeam, 0, nAtoms - 1);
                 inducedDipoleFieldRegion.init(atoms, crystal, use, molecule,
                         ipdamp, thole, coordinates, realSpaceNeighborParameters,
                         inducedDipole, inducedDipoleCR, reciprocalSpaceTerm, reciprocalSpace,
                         lambdaMode, ewaldParameters, field, fieldCR, pmeTimings);
-                sectionTeam.execute(inducedDipoleFieldRegion);
+                inducedDipoleFieldRegion.executeWith(sectionTeam);
                 pmeTimings.realSpaceSCFTotal = inducedDipoleFieldRegion.getRealSpaceSCFTotal();
                 if (reciprocalSpaceTerm && ewaldParameters.aewald > 0.0) {
                     reciprocalSpace.computeInducedPhi(cartesianDipolePhi, cartesianDipolePhiCR);
@@ -1715,12 +1736,13 @@ public class ParticleMeshEwaldCart extends ParticleMeshEwald implements LambdaIn
                 if (reciprocalSpaceTerm && ewaldParameters.aewald > 0.0) {
                     reciprocalSpace.splineInducedDipoles(inducedDipole, inducedDipoleCR, use);
                 }
-
+                field.reset(parallelTeam, 0, nAtoms - 1);
+                fieldCR.reset(parallelTeam, 0, nAtoms - 1);
                 inducedDipoleFieldRegion.init(atoms, crystal, use, molecule,
                         ipdamp, thole, coordinates, realSpaceNeighborParameters,
                         inducedDipole, inducedDipoleCR, reciprocalSpaceTerm, reciprocalSpace,
                         lambdaMode, ewaldParameters, field, fieldCR, pmeTimings);
-                sectionTeam.execute(inducedDipoleFieldRegion);
+                inducedDipoleFieldRegion.executeWith(sectionTeam);
                 pmeTimings.realSpaceSCFTotal = inducedDipoleFieldRegion.getRealSpaceSCFTotal();
 
                 if (reciprocalSpaceTerm && ewaldParameters.aewald > 0.0) {
@@ -2578,7 +2600,7 @@ public class ParticleMeshEwaldCart extends ParticleMeshEwald implements LambdaIn
          * Boundary conditions for the vapor end of the alchemical path.
          */
         private Crystal vaporCrystal = null;
-        private int[][][] vaporLists =  null;
+        private int[][][] vaporLists = null;
         private Range[] vacuumRanges = null;
         private IntegerSchedule vaporPermanentSchedule = null;
         private IntegerSchedule vaporEwaldSchedule = null;

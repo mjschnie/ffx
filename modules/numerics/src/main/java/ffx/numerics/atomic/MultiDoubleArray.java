@@ -41,6 +41,8 @@ import java.util.Arrays;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import static java.lang.String.format;
+
 import edu.rit.pj.IntegerForLoop;
 import edu.rit.pj.ParallelRegion;
 import edu.rit.pj.ParallelTeam;
@@ -103,8 +105,7 @@ public class MultiDoubleArray implements AtomicDoubleArray {
             parallelTeam.execute(new ParallelRegion() {
                 @Override
                 public void run() throws Exception {
-                    int nThreads = parallelTeam.getThreadCount();
-                    execute(0, nThreads - 1, new IntegerForLoop() {
+                    execute(0, threadCount - 1, new IntegerForLoop() {
                         @Override
                         public void run(int first, int last) {
                             for (int i = first; i <= last; i++) {
