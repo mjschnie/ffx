@@ -76,7 +76,9 @@ import ffx.crystal.SymOp;
 import ffx.numerics.Constraint;
 import ffx.numerics.atomic.AtomicDoubleArray.AtomicDoubleArrayImpl;
 import ffx.numerics.atomic.AtomicDoubleArray3D;
-import ffx.numerics.switching.*;
+import ffx.numerics.switching.ConstantSwitch;
+import ffx.numerics.switching.UnivariateFunctionFactory;
+import ffx.numerics.switching.UnivariateSwitchingFunction;
 import ffx.potential.bonded.Angle;
 import ffx.potential.bonded.AngleTorsion;
 import ffx.potential.bonded.Atom;
@@ -1996,12 +1998,12 @@ public class ForceFieldEnergy implements CrystalPotential, LambdaInterface {
             totalEnergy = 0.0;
 
             // Zero out the Cartesian coordinate gradient for each atom.
-            if (gradient) {
-                for (int i = 0; i < nAtoms; i++) {
-                    atoms[i].setXYZGradient(0.0, 0.0, 0.0);
-                    atoms[i].setLambdaXYZGradient(0.0, 0.0, 0.0);
-                }
-            }
+//            if (gradient) {
+//                for (int i = 0; i < nAtoms; i++) {
+//                    atoms[i].setXYZGradient(0.0, 0.0, 0.0);
+//                    atoms[i].setLambdaXYZGradient(0.0, 0.0, 0.0);
+//                }
+//            }
 
             // Computed the bonded energy terms in parallel.
             try {
@@ -2986,7 +2988,7 @@ public class ForceFieldEnergy implements CrystalPotential, LambdaInterface {
     /**
      * <p>
      * setRestraintBond</p>
-     *
+
      * @param a1            a {@link ffx.potential.bonded.Atom} object.
      * @param a2            a {@link ffx.potential.bonded.Atom} object.
      * @param distance      a double.
@@ -2996,7 +2998,8 @@ public class ForceFieldEnergy implements CrystalPotential, LambdaInterface {
      * @param lamEnd        At what lambda does the restraint hit full strength?
      * @param switchingFunction Switching function to use as a lambda dependence.
      */
-    private void setRestraintBond(Atom a1, Atom a2, double distance, double forceConstant, double flatBottom, double lamStart, double lamEnd, UnivariateSwitchingFunction switchingFunction) {
+    private void setRestraintBond(Atom a1, Atom a2, double distance, double forceConstant, double flatBottom,
+                                  double lamStart, double lamEnd, UnivariateSwitchingFunction switchingFunction) {
         restraintBondTerm = true;
         boolean rbLambda = !(switchingFunction instanceof ConstantSwitch) && lambdaTerm;
         RestraintBond rb = new RestraintBond(a1, a2, crystal, rbLambda, lamStart, lamEnd, switchingFunction);
@@ -4042,12 +4045,14 @@ public class ForceFieldEnergy implements CrystalPotential, LambdaInterface {
             // Define how the gradient will be accumulated.
             atomicDoubleArrayImpl = AtomicDoubleArrayImpl.MULTI;
             ForceField forceField = molecularAssembly.getForceField();
+
             String value = forceField.getString(ForceFieldString.ARRAY_REDUCTION, "MULTI");
             try {
                 atomicDoubleArrayImpl = AtomicDoubleArrayImpl.valueOf(toEnumForm(value));
             } catch (Exception e) {
                 logger.info(format(" Unrecognized ARRAY-REDUCTION %s; defaulting to %s", value, atomicDoubleArrayImpl));
             }
+            logger.fine(format("  Bonded using %s arrays.", atomicDoubleArrayImpl.toString()));
 
             grad = new AtomicDoubleArray3D(atomicDoubleArrayImpl, nAtoms, nThreads);
             if (lambdaTerm) {
@@ -4372,9 +4377,15 @@ public class ForceFieldEnergy implements CrystalPotential, LambdaInterface {
                 int threadID = getThreadIndex();
                 if (gradient) {
                     grad.reset(threadID, first, last);
+                    for (int i = first; i <= last; i++) {
+                        atoms[i].setXYZGradient(0.0, 0.0, 0.0);
+                    }
                 }
                 if (lambdaTerm) {
                     lambdaGrad.reset(threadID, first, last);
+                    for (int i = first; i <= last; i++) {
+                        atoms[i].setLambdaXYZGradient(0.0, 0.0, 0.0);
+                    }
                 }
             }
         }

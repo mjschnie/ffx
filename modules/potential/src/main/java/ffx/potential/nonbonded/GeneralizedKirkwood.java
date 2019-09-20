@@ -48,11 +48,12 @@ import static org.apache.commons.math3.util.FastMath.max;
 import static org.apache.commons.math3.util.FastMath.pow;
 
 import edu.rit.pj.ParallelTeam;
-import edu.rit.pj.reduction.SharedDoubleArray;
 
 import ffx.crystal.Crystal;
 import ffx.numerics.atomic.AtomicDoubleArray;
+import ffx.numerics.atomic.AtomicDoubleArray.AtomicDoubleArrayImpl;
 import ffx.numerics.atomic.AtomicDoubleArray3D;
+import ffx.numerics.atomic.MultiDoubleArray;
 import ffx.potential.bonded.Atom;
 import ffx.potential.bonded.LambdaInterface;
 import ffx.potential.nonbonded.ParticleMeshEwald.Polarization;
@@ -62,12 +63,15 @@ import ffx.potential.nonbonded.implicit.CavitationRegion;
 import ffx.potential.nonbonded.implicit.DispersionRegion;
 import ffx.potential.nonbonded.implicit.GKEnergyRegion;
 import ffx.potential.nonbonded.implicit.InducedGKFieldRegion;
+import ffx.potential.nonbonded.implicit.InitializationRegion;
 import ffx.potential.nonbonded.implicit.PermanentGKFieldRegion;
 import ffx.potential.nonbonded.implicit.VolumeRegion;
 import ffx.potential.parameters.AtomType;
 import ffx.potential.parameters.ForceField;
 import ffx.potential.parameters.SoluteRadii;
+import static ffx.numerics.atomic.AtomicDoubleArray.atomicDoubleArrayFactory;
 import static ffx.potential.nonbonded.ParticleMeshEwald.DEFAULT_ELECTRIC;
+import static ffx.potential.parameters.ForceField.ForceFieldString.ARRAY_REDUCTION;
 import static ffx.potential.parameters.ForceField.toEnumForm;
 
 /**
@@ -244,21 +248,29 @@ public class GeneralizedKirkwood implements LambdaInterface {
     private double[][][] inducedDipoleCR;
 
     /**
-     * Gradient array for each thread.
+     * AtomicDoubleArray implementation to use.
+     */
+    private AtomicDoubleArrayImpl atomicDoubleArrayImpl;
+    /**
+     * Atomic Gradient array.
      */
     private AtomicDoubleArray3D grad;
     /**
-     * Torque array for each thread.
+     * Atomic Torque array.
      */
     private AtomicDoubleArray3D torque;
     /**
-     * Lambda gradient array for each thread (dU/dX/dL)
+     * Atomic Born radii gradient array.
      */
-    private AtomicDoubleArray3D lambdaGrad;
+    private AtomicDoubleArray sharedBornGrad;
     /**
-     * Lambda torque array for each thread.
+     * Atomic GK field array.
      */
-    private AtomicDoubleArray3D lambdaTorque;
+    public AtomicDoubleArray3D sharedGKField;
+    /**
+     * Atomic GK field chain-rule array.
+     */
+    public AtomicDoubleArray3D sharedGKFieldCR;
 
     /**
      * Neighbor lists for each atom and symmetry operator.
@@ -275,6 +287,10 @@ public class GeneralizedKirkwood implements LambdaInterface {
      * Parallel team object for shared memory parallelization.
      */
     private final ParallelTeam parallelTeam;
+    /**
+     * Initialize GK output variables.
+     */
+    private final InitializationRegion initializationRegion;
     /**
      * Parallel computation of Born Radii.
      */
@@ -312,18 +328,6 @@ public class GeneralizedKirkwood implements LambdaInterface {
      */
     private final GaussVol gaussVol;
 
-    /**
-     * Shared array for computation of Born radii gradient.
-     */
-    private SharedDoubleArray sharedBornGrad;
-    /**
-     * Shared arrays for computation of the GK field for each symmetry operator.
-     */
-    public SharedDoubleArray[] sharedGKField;
-    /**
-     * Shared arrays for computation of the GK field chain-rule term for each symmetry operator.
-     */
-    public SharedDoubleArray[] sharedGKFieldCR;
     /**
      * GK cut-off distance.
      */
@@ -423,6 +427,15 @@ public class GeneralizedKirkwood implements LambdaInterface {
         // Set the Kirkwood multipolar reaction field constants.
         epsilon = forceField.getDouble(ForceField.ForceFieldDouble.GK_EPSILON, dWater);
 
+        // Define how force arrays will be accumulated.
+        String value = forceField.getString(ARRAY_REDUCTION, "MULTI");
+        try {
+            atomicDoubleArrayImpl = AtomicDoubleArrayImpl.valueOf(toEnumForm(value));
+        } catch (Exception e) {
+            atomicDoubleArrayImpl = AtomicDoubleArrayImpl.MULTI;
+            logger.info(format(" Unrecognized ARRAY-REDUCTION %s; defaulting to %s", value, atomicDoubleArrayImpl));
+        }
+
         // Define default Bondi scale factor, and HCT overlap scale factors.
         bondiScale = forceField.getDouble(ForceField.ForceFieldDouble.GK_BONDIOVERRIDE, DEFAULT_BONDI_SCALE);
         heavyAtomOverlapScale = forceField.getDouble(ForceField.ForceFieldDouble.GK_OVERLAPSCALE, DEFAULT_OVERLAP_SCALE);
@@ -454,8 +467,9 @@ public class GeneralizedKirkwood implements LambdaInterface {
         }
         nonPolar = nonpolarModel;
 
-        sharedGKField = new SharedDoubleArray[3];
-        sharedGKFieldCR = new SharedDoubleArray[3];
+        int threadCount = parallelTeam.getThreadCount();
+        sharedGKField = new AtomicDoubleArray3D(atomicDoubleArrayImpl, nAtoms, threadCount);
+        sharedGKFieldCR = new AtomicDoubleArray3D(atomicDoubleArrayImpl, nAtoms, threadCount);
 
         nativeEnvironmentApproximation = forceField.getBoolean(
                 ForceField.ForceFieldBoolean.NATIVE_ENVIRONMENT_APPROXIMATION, false);
@@ -464,6 +478,7 @@ public class GeneralizedKirkwood implements LambdaInterface {
         cut2 = cutoff * cutoff;
         lambdaTerm = forceField.getBoolean(ForceField.ForceFieldBoolean.GK_LAMBDATERM,
                 forceField.getBoolean(ForceField.ForceFieldBoolean.LAMBDATERM, false));
+
 
         /*
           If polarization lambda exponent is set to 0.0, then we're running
@@ -484,8 +499,6 @@ public class GeneralizedKirkwood implements LambdaInterface {
             }
         }
 
-        int threadCount = parallelTeam.getThreadCount();
-
         initAtomArrays();
 
         doVolume = forceField.getBoolean(ForceField.ForceFieldBoolean.VOLUME, false);
@@ -495,8 +508,8 @@ public class GeneralizedKirkwood implements LambdaInterface {
             case CAV:
                 probe = tempProbe;
                 tensionDefault = DEFAULT_CAV_SURFACE_TENSION;
-                cavitationRegion = new CavitationRegion(atoms, x, y, z, use, neighborLists, grad, lambdaGrad,
-                        threadCount, probe, lambdaTerm, tensionDefault);
+                cavitationRegion = new CavitationRegion(atoms, x, y, z, use, neighborLists,
+                        grad, threadCount, probe, tensionDefault);
                 volumeRegion = new VolumeRegion(atoms, x, y, z, tensionDefault, threadCount);
                 dispersionRegion = null;
                 gaussVol = null;
@@ -504,8 +517,8 @@ public class GeneralizedKirkwood implements LambdaInterface {
             case CAV_DISP:
                 probe = tempProbe;
                 tensionDefault = DEFAULT_CAVDISP_SURFACE_TENSION;
-                cavitationRegion = new CavitationRegion(atoms, x, y, z, use, neighborLists, grad, lambdaGrad,
-                        threadCount, probe, lambdaTerm, tensionDefault);
+                cavitationRegion = new CavitationRegion(atoms, x, y, z, use, neighborLists,
+                        grad, threadCount, probe, tensionDefault);
                 volumeRegion = new VolumeRegion(atoms, x, y, z, tensionDefault, threadCount);
                 dispersionRegion = new DispersionRegion(threadCount, atoms);
                 gaussVol = null;
@@ -592,6 +605,7 @@ public class GeneralizedKirkwood implements LambdaInterface {
             gaussVol.setSolventPressure(solventPressue);
         }
 
+        initializationRegion = new InitializationRegion(threadCount);
         bornRadiiRegion = new BornRadiiRegion(threadCount);
         permanentGKFieldRegion = new PermanentGKFieldRegion(threadCount, forceField);
         inducedGKFieldRegion = new InducedGKFieldRegion(threadCount, forceField);
@@ -624,20 +638,29 @@ public class GeneralizedKirkwood implements LambdaInterface {
 
     }
 
+    public void init() {
+        initializationRegion.init(atoms, lambdaTerm, grad, torque, sharedBornGrad);
+        initializationRegion.executeWith(parallelTeam);
+    }
+
+    public AtomicDoubleArray3D getGrad() {
+        return grad;
+    }
+
+    public AtomicDoubleArray3D getTorque() {
+        return torque;
+    }
+
     public void reduce(AtomicDoubleArray3D g, AtomicDoubleArray3D t,
                        AtomicDoubleArray3D lg, AtomicDoubleArray3D lt) {
-        grad.reduce(0, nAtoms - 1);
-        torque.reduce(0, nAtoms - 1);
-        if (lambdaTerm) {
-            lambdaGrad.reduce(0, nAtoms - 1);
-            lambdaTorque.reduce(0, nAtoms - 1);
-        }
+        grad.reduce(parallelTeam, 0, nAtoms - 1);
+        torque.reduce(parallelTeam, 0, nAtoms - 1);
         for (int i = 0; i < nAtoms; i++) {
-            g.add(0, i, grad.getX(i), grad.getY(i), grad.getZ(i));
-            t.add(0, i, torque.getX(i), torque.getY(i), torque.getZ(i));
+            g.add(0, i, lPow * grad.getX(i), lPow * grad.getY(i), lPow * grad.getZ(i));
+            t.add(0, i, lPow * torque.getX(i), lPow * torque.getY(i), lPow * torque.getZ(i));
             if (lambdaTerm) {
-                lg.add(0, i, lambdaGrad.getX(i), lambdaGrad.getY(i), lambdaGrad.getZ(i));
-                lt.add(0, i, lambdaTorque.getX(i), lambdaTorque.getY(i), lambdaTorque.getZ(i));
+                lg.add(0, i, dlPow * grad.getX(i), dlPow * grad.getY(i), dlPow * grad.getZ(i));
+                lt.add(0, i, dlPow * torque.getX(i), dlPow * torque.getY(i), dlPow * torque.getZ(i));
             }
         }
     }
@@ -792,25 +815,19 @@ public class GeneralizedKirkwood implements LambdaInterface {
 
         if (grad == null) {
             int threadCount = parallelTeam.getThreadCount();
-            grad = new AtomicDoubleArray3D(AtomicDoubleArray.AtomicDoubleArrayImpl.MULTI, nAtoms, threadCount);
-            torque = new AtomicDoubleArray3D(AtomicDoubleArray.AtomicDoubleArrayImpl.MULTI, nAtoms, threadCount);
-            lambdaGrad = new AtomicDoubleArray3D(AtomicDoubleArray.AtomicDoubleArrayImpl.MULTI, nAtoms, threadCount);
-            lambdaTorque = new AtomicDoubleArray3D(AtomicDoubleArray.AtomicDoubleArrayImpl.MULTI, nAtoms, threadCount);
+            grad = new AtomicDoubleArray3D(atomicDoubleArrayImpl, nAtoms, threadCount);
+            torque = new AtomicDoubleArray3D(atomicDoubleArrayImpl, nAtoms, threadCount);
+            sharedBornGrad = atomicDoubleArrayFactory(atomicDoubleArrayImpl, threadCount, nAtoms);
         } else {
             grad.alloc(nAtoms);
             torque.alloc(nAtoms);
-            lambdaGrad.alloc(nAtoms);
-            lambdaTorque.alloc(nAtoms);
+            sharedBornGrad.alloc(nAtoms);
         }
 
-        if (sharedGKField[0] == null || sharedGKField[0].length() < nAtoms) {
-            sharedGKField[0] = new SharedDoubleArray(nAtoms);
-            sharedGKField[1] = new SharedDoubleArray(nAtoms);
-            sharedGKField[2] = new SharedDoubleArray(nAtoms);
-            sharedGKFieldCR[0] = new SharedDoubleArray(nAtoms);
-            sharedGKFieldCR[1] = new SharedDoubleArray(nAtoms);
-            sharedGKFieldCR[2] = new SharedDoubleArray(nAtoms);
-            sharedBornGrad = new SharedDoubleArray(nAtoms);
+        sharedGKField.alloc(nAtoms);
+        sharedGKFieldCR.alloc(nAtoms);
+
+        if (baseRadius == null || baseRadius.length < nAtoms) {
             baseRadius = new double[nAtoms];
             overlapScale = new double[nAtoms];
             born = new double[nAtoms];
@@ -913,9 +930,11 @@ public class GeneralizedKirkwood implements LambdaInterface {
      */
     public void computePermanentGKField() {
         try {
+            sharedGKField.reset(parallelTeam, 0, nAtoms - 1);
             permanentGKFieldRegion.init(atoms, globalMultipole, crystal, sXYZ, neighborLists,
                     use, cut2, born, sharedGKField);
             parallelTeam.execute(permanentGKFieldRegion);
+            sharedGKField.reduce(parallelTeam, 0, nAtoms - 1);
         } catch (Exception e) {
             String message = "Fatal exception computing permanent GK field.";
             logger.log(Level.SEVERE, message, e);
@@ -928,9 +947,13 @@ public class GeneralizedKirkwood implements LambdaInterface {
      */
     public void computeInducedGKField() {
         try {
+            sharedGKField.reset(parallelTeam, 0, nAtoms - 1);
+            sharedGKFieldCR.reset(parallelTeam, 0, nAtoms - 1);
             inducedGKFieldRegion.init(atoms, inducedDipole, inducedDipoleCR, crystal, sXYZ, neighborLists,
                     use, cut2, born, sharedGKField, sharedGKFieldCR);
             parallelTeam.execute(inducedGKFieldRegion);
+            sharedGKField.reduce(parallelTeam, 0, nAtoms - 1);
+            sharedGKFieldCR.reduce(parallelTeam, 0, nAtoms - 1);
         } catch (Exception e) {
             String message = "Fatal exception computing induced GK field.";
             logger.log(Level.SEVERE, message, e);
@@ -946,21 +969,26 @@ public class GeneralizedKirkwood implements LambdaInterface {
      * @return a double.
      */
     public double solvationEnergy(boolean gradient, boolean print) {
+        return solvationEnergy(0.0, gradient, print);
+    }
 
-        // Initialize the gradient accumulation arrays.
-        if (gradient) {
-            for (int j = 0; j < nAtoms; j++) {
-                sharedBornGrad.set(j, 0.0);
-            }
-        }
+    /**
+     * <p>
+     * solvationEnergy</p>
+     *
+     * @param gkPolarizationEnergy GK vacuum to SCRF polarization energy cost.
+     * @param gradient             a boolean.
+     * @param print                a boolean.
+     * @return a double.
+     */
+    public double solvationEnergy(double gkPolarizationEnergy, boolean gradient, boolean print) {
 
         try {
             // Find the GK energy.
             gkTime = -System.nanoTime();
             gkEnergyRegion.init(atoms, globalMultipole, inducedDipole, inducedDipoleCR,
                     crystal, sXYZ, neighborLists, use, cut2, baseRadius, born,
-                    lambdaTerm, lPow, dlPow, gradient,
-                    grad, torque, lambdaGrad, lambdaTorque, sharedBornGrad);
+                    gradient, grad, torque, sharedBornGrad);
             parallelTeam.execute(gkEnergyRegion);
             gkTime += System.nanoTime();
 
@@ -977,8 +1005,7 @@ public class GeneralizedKirkwood implements LambdaInterface {
                     break;
                 case CAV_DISP:
                     dispersionTime = -System.nanoTime();
-                    dispersionRegion.init(atoms, crystal, use, neighborLists, x, y, z, cut2,
-                            gradient, lambdaTerm, lPow, dlPow, grad, lambdaGrad);
+                    dispersionRegion.init(atoms, crystal, use, neighborLists, x, y, z, cut2, gradient, grad);
                     parallelTeam.execute(dispersionRegion);
                     dispersionTime += System.nanoTime();
                     cavitationTime = -System.nanoTime();
@@ -991,8 +1018,7 @@ public class GeneralizedKirkwood implements LambdaInterface {
                     break;
                 case GAUSS_DISP:
                     dispersionTime = -System.nanoTime();
-                    dispersionRegion.init(atoms, crystal, use, neighborLists, x, y, z, cut2,
-                            gradient, lambdaTerm, lPow, dlPow, grad, lambdaGrad);
+                    dispersionRegion.init(atoms, crystal, use, neighborLists, x, y, z, cut2, gradient, grad);
                     parallelTeam.execute(dispersionRegion);
                     dispersionTime += System.nanoTime();
 
@@ -1008,8 +1034,7 @@ public class GeneralizedKirkwood implements LambdaInterface {
                     break;
                 case BORN_CAV_DISP:
                     dispersionTime = -System.nanoTime();
-                    dispersionRegion.init(atoms, crystal, use, neighborLists, x, y, z, cut2,
-                            gradient, lambdaTerm, lPow, dlPow, grad, lambdaGrad);
+                    dispersionRegion.init(atoms, crystal, use, neighborLists, x, y, z, cut2, gradient, grad);
                     parallelTeam.execute(dispersionRegion);
                     dispersionTime += System.nanoTime();
                     break;
@@ -1029,9 +1054,9 @@ public class GeneralizedKirkwood implements LambdaInterface {
             try {
                 gkTime -= System.nanoTime();
                 bornGradRegion.init(atoms, crystal, sXYZ, neighborLists, baseRadius,
-                        overlapScale, use, cut2, nativeEnvironmentApproximation, born, lambdaTerm,
-                        lPow, dlPow, grad, lambdaGrad, sharedBornGrad);
-                parallelTeam.execute(bornGradRegion);
+                        overlapScale, use, cut2, nativeEnvironmentApproximation,
+                        born, grad, sharedBornGrad);
+                bornGradRegion.executeWith(parallelTeam);
                 gkTime += System.nanoTime();
             } catch (Exception e) {
                 String message = "Fatal exception computing Born radii chain rule term.";
@@ -1039,9 +1064,10 @@ public class GeneralizedKirkwood implements LambdaInterface {
             }
         }
 
+        solvationEnergy = gkEnergyRegion.getEnergy() + gkPolarizationEnergy;
+
         if (print) {
-            logger.info(format(" Generalized Kirkwood%16.8f %10.3f",
-                    gkEnergyRegion.getEnergy(), gkTime * 1e-9));
+            logger.info(format(" Generalized Kirkwood%16.8f %10.3f", solvationEnergy, gkTime * 1e-9));
             switch (nonPolar) {
                 case CAV:
                     if (doVolume) {
@@ -1088,31 +1114,28 @@ public class GeneralizedKirkwood implements LambdaInterface {
         switch (nonPolar) {
             case CAV:
                 if (doVolume) {
-                    solvationEnergy = gkEnergyRegion.getEnergy() + volumeRegion.getEnergy();
+                    solvationEnergy += volumeRegion.getEnergy();
                 } else {
-                    solvationEnergy = gkEnergyRegion.getEnergy() + cavitationRegion.getEnergy();
+                    solvationEnergy += cavitationRegion.getEnergy();
                 }
                 break;
             case CAV_DISP:
                 if (doVolume) {
-                    solvationEnergy = gkEnergyRegion.getEnergy() + dispersionRegion.getEnergy()
-                            + volumeRegion.getEnergy();
+                    solvationEnergy += dispersionRegion.getEnergy() + volumeRegion.getEnergy();
                 } else {
-                    solvationEnergy = gkEnergyRegion.getEnergy() + dispersionRegion.getEnergy()
-                            + cavitationRegion.getEnergy();
+                    solvationEnergy += dispersionRegion.getEnergy() + cavitationRegion.getEnergy();
                 }
                 break;
             case GAUSS_DISP:
-                solvationEnergy = gkEnergyRegion.getEnergy() + dispersionRegion.getEnergy() + gaussVol.getEnergy();
+                solvationEnergy += dispersionRegion.getEnergy() + gaussVol.getEnergy();
                 break;
             case BORN_CAV_DISP:
-                solvationEnergy = gkEnergyRegion.getEnergy() + dispersionRegion.getEnergy();
+                solvationEnergy += dispersionRegion.getEnergy();
                 break;
             case HYDROPHOBIC_PMF:
             case BORN_SOLV:
             case NONE:
             default:
-                solvationEnergy = gkEnergyRegion.getEnergy();
                 break;
         }
 
@@ -1216,8 +1239,7 @@ public class GeneralizedKirkwood implements LambdaInterface {
         if (lambdaTerm) {
             this.lambda = lambda;
         } else {
-
-            // If the lambdaTerm flag is false, lambda must be set to one.
+            // If the lambdaTerm flag is false, lambda is set to one.
             this.lambda = 1.0;
             lPow = 1.0;
             dlPow = 0.0;
@@ -1265,7 +1287,7 @@ public class GeneralizedKirkwood implements LambdaInterface {
      */
     @Override
     public void getdEdXdL(double[] gradient) {
-
+        // This contribution is collected by GeneralizedKirkwood.reduce
     }
 
 }

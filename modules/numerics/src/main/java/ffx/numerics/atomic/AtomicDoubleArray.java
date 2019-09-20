@@ -37,6 +37,8 @@
 //******************************************************************************
 package ffx.numerics.atomic;
 
+import edu.rit.pj.ParallelTeam;
+
 /**
  * This interface abstracts away the implementation of maintaining a 1D double
  * array that is operated on by multiple threads.
@@ -51,6 +53,19 @@ public interface AtomicDoubleArray {
      */
     enum AtomicDoubleArrayImpl {
         ADDER, MULTI, PJ
+    }
+
+    static AtomicDoubleArray atomicDoubleArrayFactory(AtomicDoubleArrayImpl atomicDoubleArrayImpl,
+                                                              int threads, int size) {
+        switch (atomicDoubleArrayImpl) {
+            case ADDER:
+                return new AdderDoubleArray(size);
+            case PJ:
+                return new PJDoubleArray(size);
+            case MULTI:
+            default:
+                return new MultiDoubleArray(threads, size);
+        }
     }
 
     /**
@@ -68,6 +83,15 @@ public interface AtomicDoubleArray {
      * @param ub       a int.
      */
     void reset(int threadID, int lb, int ub);
+
+    /**
+     * Reset the double array to Zero using a ParallelTeam.
+     *
+     * @param parallelTeam ParallelTeam.
+     * @param lb       a int.
+     * @param ub       a int.
+     */
+    void reset(ParallelTeam parallelTeam, int lb, int ub);
 
     /**
      * Add value to the double array at the specified index.
@@ -95,6 +119,15 @@ public interface AtomicDoubleArray {
      * @param ub a int.
      */
     void reduce(int lb, int ub);
+
+    /**
+     * Perform reduction between the given lower bound (lb) and upper bound (up)
+     * usign a ParallelTeam.
+     *
+     * @param lb a int.
+     * @param ub a int.
+     */
+    void reduce(ParallelTeam parallelTeam, int lb, int ub);
 
     /**
      * Get the value of the array at the specified index (usually subsequent to

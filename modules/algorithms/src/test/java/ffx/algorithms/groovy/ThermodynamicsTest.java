@@ -98,45 +98,43 @@ public class ThermodynamicsTest extends PJDependentTest {
                         null, null, null, null, new String[]{}, new String[]{}, new String[]{"-h", "true"}
                 },
                 {
-                        "Acetamide Implicit Solvation Free Energy: -10.8 kcal/mol",
+                        "Acetamide Implicit Solvation Free Energy: -8.5 kcal/mol",
                         new String[]{"ffx/algorithms/structures/acetamide.gk.xyz"},
-                        ThermoTestMode.FREE, false, -10.8, 1.0, null, null, null, null, null, null,
-                        new String[]{"-C", "10", "-d", "1.0", "-n", "50000", "-w", "5", "--bM", "0.25", "--tp", "4"},
+                        ThermoTestMode.FREE, false, -8.5, 1.0, null, null, null, null, null, null,
+                        new String[]{"-C", "10", "--s1", "1", "--f1", "9", "-d", "1.0", "-n", "20000", "-w", "5", "--bM", "0.25", "--tp", "2.0"},
                         new String[]{"randomseed", "42"}, new String[]{}
                 },
                 {
                         "Acetamide Implicit Solvation Gradients: L = 0.9",
                         new String[]{"ffx/algorithms/structures/acetamide.gk.xyz"},
                         ThermoTestMode.GRAD, false, 0, 0, intRange(1, 3),
-                        new double[]{-14.00257395309939, -14.1547628}, new double[]{-47.720369065614356, 2.88020118},
-                        new double[]{-636.2715875415239, Double.NaN},
+                        new double[]{-19.5922844295, Double.NaN}, new double[]{-9.19007695807, Double.NaN},
+                        new double[]{-0.411272333503, Double.NaN},
                         new double[][][]{
-                                {{-2.5060460011671735, -0.8234854351948333, -0.8116457717486729},
-                                        {13.563606950444527, 0.04427870228203579, 8.168310921746576}},
-                                {{0.3245837863444, -0.3346459581204537, 0.21247087522245325},
-                                        {-2.1088804470365896, -0.18290359797842182, -0.7158477527631418}}},
-                        new double[][][]{
-                                {{6.626133521887895, -6.419129838368647, 6.117539850782897},
-                                        {-44.36007075466142, -5.35872684032147, -19.08550997093686}},
+                                {{-0.8544588637862096, -0.8397341056649319, 0.06944048731983576},
+                                        {6.30104595968044, -0.9009925550282452, 5.046876586138691}},
                                 new double[2][3]},
-                        new String[]{"-l", "0.9"}, new String[]{}, new String[]{}
+                        new double[][][]{
+                                {{2.122123094590772, -0.3675862098101905, 1.2596680521465866},
+                                        {-10.529753005123064, -1.373066839187758, -4.523110481468447}},
+                                new double[2][3]},
+                        new String[]{"-l", "0.9", "--s1", "1", "--f1", "9", "--s1", "1", "--f1", "9"}, new String[]{}, new String[]{}
                 },
                 {
                         "Acetamide Implicit Solvation Gradients: L = 1.0",
                         new String[]{"ffx/algorithms/structures/acetamide.gk.xyz"},
                         ThermoTestMode.GRAD, false, 0, 0, intRange(1, 3),
-                        new double[]{-22.662937227970133, -22.4300811}, new double[]{-132.55658073781763, -4.28073063},
-                        new double[]{-1060.4526459025403, Double.NaN},
+                        new double[]{-20.502726265304613, Double.NaN}, new double[]{-8.886170765485948, Double.NaN},
+                        new double[]{7.5710964747886464, Double.NaN},
                         new double[][][]{
-                                {{-1.3035254731208519, -1.988438628083957, 0.29857442339340845},
-                                        {5.5130755912652365, -0.9282309835540822, 4.704644297391372}},
-                                {{1.670608498, -1.693777005, 1.106802141},
-                                        {-10.81375409, -0.871398548, -3.61577372}}},
-                        new double[][][]{
-                                {{18.405926449688586, -17.830916217690675, 16.99316625217472},
-                                        {-123.22241876294834, -14.885352334226242, -53.01530547482457}},
+                                {{-0.6401640209225425, -0.8766508210158941, 0.19690714293276135},
+                                        {5.247970188816955, -1.0376514990277212, 4.594419906332998}},
                                 new double[2][3]},
-                        new String[]{"-l", "1.0"}, new String[]{}, new String[]{}
+                        new double[][][]{
+                                {{2.1971886563390255, -0.37412187773949396, 1.31442990722058},
+                                        {-10.533640299360645, -1.3498665433258301, -4.528166513960421}},
+                                new double[2][3]},
+                        new String[]{"-l", "1.0", "--s1", "1", "--f1", "9", "--s1", "1", "--f1", "9"}, new String[]{}, new String[]{}
                 },
                 {
                         // Gradient atoms: a few random protein atoms, some of the coordinating carboxyls, the ions, and some water.
@@ -649,8 +647,8 @@ public class ThermodynamicsTest extends PJDependentTest {
                 {
                         "Water-Sodium to Water Dimer Free Energy Test",
                         new String[]{"ffx/algorithms/structures/water-dimer.xyz", "ffx/algorithms/structures/water-na.xyz"},
-                        ThermoTestMode.FREE, true, 16.5, 2.0, null, null, null, null, null, null,
-                        new String[]{"-d", "1.0", "-l", "0.5", "--la1", "1-3", "--la2", "1", "-n", "500000", "-Q", "20000", "-k", "20.0", "-w", "20.0", "-r", "5.0"},
+                        ThermoTestMode.FREE, true, 17.0, 3.0, null, null, null, null, null, null,
+                        new String[]{"-d", "1.0", "-l", "0.5", "--la1", "1-3", "--la2", "1", "-n", "50000", "-Q", "20000", "-k", "20.0", "-w", "20.0", "-r", "5.0", "-C", "10"},
                         new String[]{"disable-neighbor-updates", "true", "lambda-bin-width", "0.025", "flambda-bin-width", "5.0", "randomseed", "2019"},
                         new String[]{}
                 }

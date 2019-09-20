@@ -517,13 +517,13 @@ public class GaussVol {
         this.volumes = volumeOffset;
 
         // Print Radii
-        for (int i = 0; i < radii.length; i++) {
-            System.out.println("Cavitation radius: " + i + ", " + radii[i]);
-        }
+//        for (int i = 0; i < radii.length; i++) {
+//            System.out.println("Cavitation radius: " + i + ", " + radii[i]);
+//        }
 
         // Print Crossover Point and Solvent Pressure Values
-        System.out.println("\nCrossover Point: " + crossOver);
-        System.out.println("Solvent Pressure: " + solventPressure + "\n");
+//        System.out.println("\nCrossover Point: " + crossOver);
+//        System.out.println("Solvent Pressure: " + solventPressure + "\n");
 
         // Run Volume calculation on radii that are slightly offset in order to do finite difference to get back surface area
         rescanTreeVolumes(positions);

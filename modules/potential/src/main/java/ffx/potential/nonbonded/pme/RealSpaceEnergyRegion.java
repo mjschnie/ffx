@@ -50,6 +50,7 @@ import static org.apache.commons.math3.util.FastMath.sqrt;
 import edu.rit.pj.IntegerForLoop;
 import edu.rit.pj.IntegerSchedule;
 import edu.rit.pj.ParallelRegion;
+import edu.rit.pj.ParallelTeam;
 import edu.rit.pj.reduction.SharedDouble;
 import edu.rit.pj.reduction.SharedInteger;
 
@@ -307,12 +308,14 @@ public class RealSpaceEnergyRegion extends ParallelRegion {
     public void init(Atom[] atoms, Crystal crystal, double[][][] coordinates, MultipoleFrameDefinition[] frame,
                      int[][] axisAtom, double[][][] globalMultipole, double[][][] inducedDipole, double[][][] inducedDipoleCR,
                      boolean[] use, int[] molecule, int[][] ip11, boolean[] isSoft, double[] ipdamp, double[] thole,
-                     RealSpaceNeighborParameters realSpaceNeighborParameters, long[] realSpaceEnergyTime,
-                     AtomicDoubleArray3D grad, AtomicDoubleArray3D torque,
+                     RealSpaceNeighborParameters realSpaceNeighborParameters,
+                     boolean gradient, boolean lambdaTerm, LambdaMode lambdaMode, Polarization polarization,
+                     EwaldParameters ewaldParameters, ScaleParameters scaleParameters, AlchemicalParameters alchemicalParameters,
+                     long[] realSpaceEnergyTime, AtomicDoubleArray3D grad, AtomicDoubleArray3D torque,
                      AtomicDoubleArray3D lambdaGrad, AtomicDoubleArray3D lambdaTorque,
-                     SharedDouble shareddEdLambda, SharedDouble sharedd2EdLambda2, boolean gradient, boolean lambdaTerm,
-                     LambdaMode lambdaMode, Polarization polarization,
-                     EwaldParameters ewaldParameters, ScaleParameters scaleParameters, AlchemicalParameters alchemicalParameters) {
+                     SharedDouble shareddEdLambda, SharedDouble sharedd2EdLambda2
+    ) {
+        // Input
         this.atoms = atoms;
         this.crystal = crystal;
         this.coordinates = coordinates;
@@ -330,13 +333,6 @@ public class RealSpaceEnergyRegion extends ParallelRegion {
         this.realSpaceLists = realSpaceNeighborParameters.realSpaceLists;
         this.realSpaceCounts = realSpaceNeighborParameters.realSpaceCounts;
         this.realSpaceSchedule = realSpaceNeighborParameters.realSpaceSchedule;
-        this.realSpaceEnergyTime = realSpaceEnergyTime;
-        this.grad = grad;
-        this.torque = torque;
-        this.lambdaGrad = lambdaGrad;
-        this.lambdaTorque = lambdaTorque;
-        this.shareddEdLambda = shareddEdLambda;
-        this.sharedd2EdLambda2 = sharedd2EdLambda2;
         this.gradient = gradient;
         this.lambdaTerm = lambdaTerm;
         this.lambdaMode = lambdaMode;
@@ -362,6 +358,14 @@ public class RealSpaceEnergyRegion extends ParallelRegion {
         this.an4 = ewaldParameters.an4;
         this.an5 = ewaldParameters.an5;
         this.scaleParameters = scaleParameters;
+        // Output
+        this.realSpaceEnergyTime = realSpaceEnergyTime;
+        this.grad = grad;
+        this.torque = torque;
+        this.lambdaGrad = lambdaGrad;
+        this.lambdaTorque = lambdaTorque;
+        this.shareddEdLambda = shareddEdLambda;
+        this.sharedd2EdLambda2 = sharedd2EdLambda2;
     }
 
     public double getPermanentEnergy() {
@@ -374,6 +378,20 @@ public class RealSpaceEnergyRegion extends ParallelRegion {
 
     public int getInteractions() {
         return sharedInteractions.get();
+    }
+
+    /**
+     * Execute the RealSpaceEnergyRegion with the passed ParallelTeam.
+     *
+     * @param parallelTeam The ParallelTeam instance to execute with.
+     */
+    public void executeWith(ParallelTeam parallelTeam) {
+        try {
+            parallelTeam.execute(this);
+        } catch (Exception e) {
+            String message = " Exception computing the electrostatic energy.\n";
+            logger.log(Level.SEVERE, message, e);
+        }
     }
 
     @Override

@@ -45,6 +45,7 @@ import static org.apache.commons.math3.util.FastMath.sqrt;
 import edu.rit.pj.IntegerForLoop;
 import edu.rit.pj.IntegerSchedule;
 import edu.rit.pj.ParallelRegion;
+import edu.rit.pj.ParallelTeam;
 import edu.rit.pj.reduction.SharedDouble;
 
 import ffx.crystal.Crystal;
@@ -263,6 +264,19 @@ public class ReciprocalEnergyRegion extends ParallelRegion {
 
     public double getInducedDipoleReciprocalEnergy() {
         return inducedDipoleRecipEnergy.get();
+    }
+
+    /**
+     * Execute the ReciprocalEnergyRegion with the passed ParallelTeam.
+     * @param parallelTeam The ParallelTeam instance to execute with.
+     */
+    public void executeWith(ParallelTeam parallelTeam) {
+        try {
+            parallelTeam.execute(this);
+        } catch (Exception e) {
+            String message = " Exception computing the electrostatic energy.\n";
+            logger.log(Level.SEVERE, message, e);
+        }
     }
 
     @Override

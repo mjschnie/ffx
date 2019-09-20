@@ -57,17 +57,17 @@ import edu.rit.util.Range;
 
 import ffx.crystal.Crystal;
 import ffx.crystal.SymOp;
+import ffx.numerics.atomic.AtomicDoubleArray3D;
 import ffx.potential.bonded.Angle;
 import ffx.potential.bonded.Atom;
 import ffx.potential.bonded.Bond;
 import ffx.potential.bonded.Torsion;
 import ffx.potential.nonbonded.ParticleMeshEwald;
 import ffx.potential.nonbonded.ParticleMeshEwald.LambdaMode;
-import ffx.potential.nonbonded.ParticleMeshEwaldCart;
-import ffx.potential.nonbonded.ParticleMeshEwaldCart.RealSpaceNeighborParameters;
 import ffx.potential.nonbonded.ParticleMeshEwaldCart.EwaldParameters;
-import ffx.potential.nonbonded.ParticleMeshEwaldCart.ScaleParameters;
 import ffx.potential.nonbonded.ParticleMeshEwaldCart.PMETimings;
+import ffx.potential.nonbonded.ParticleMeshEwaldCart.RealSpaceNeighborParameters;
+import ffx.potential.nonbonded.ParticleMeshEwaldCart.ScaleParameters;
 import ffx.potential.nonbonded.ReciprocalSpace;
 import ffx.potential.parameters.ForceField;
 import static ffx.numerics.special.Erf.erfc;
@@ -189,13 +189,13 @@ public class PermanentFieldRegion extends ParallelRegion {
     private IntegerSchedule permanentSchedule;
 
     /**
-     * Field array for each thread. [threadID][X/Y/Z][atomID]
+     * Field array.
      */
-    private double[][][] field;
+    private AtomicDoubleArray3D field;
     /**
-     * Chain rule field array for each thread. [threadID][X/Y/Z][atomID]
+     * Chain rule field array.
      */
-    private double[][][] fieldCR;
+    private AtomicDoubleArray3D fieldCR;
     /**
      * Timing variables.
      */
@@ -240,7 +240,7 @@ public class PermanentFieldRegion extends ParallelRegion {
                      LambdaMode lambdaMode, boolean reciprocalSpaceTerm, ReciprocalSpace reciprocalSpace,
                      EwaldParameters ewaldParameters, PCGSolver pcgSolver,
                      IntegerSchedule permanentSchedule, RealSpaceNeighborParameters realSpaceNeighborParameters,
-                     double[][][] field, double[][][] fieldCR, PMETimings pmeTimings) {
+                     AtomicDoubleArray3D field, AtomicDoubleArray3D fieldCR, PMETimings pmeTimings) {
         this.atoms = atoms;
         this.crystal = crystal;
         this.coordinates = coordinates;
@@ -449,18 +449,6 @@ public class PermanentFieldRegion extends ParallelRegion {
             public void start() {
                 int threadIndex = getThreadIndex();
                 realSpacePermTime[threadIndex] -= System.nanoTime();
-                double[] fX = field[threadIndex][0];
-                double[] fY = field[threadIndex][1];
-                double[] fZ = field[threadIndex][2];
-                double[] fXCR = fieldCR[threadIndex][0];
-                double[] fYCR = fieldCR[threadIndex][1];
-                double[] fZCR = fieldCR[threadIndex][2];
-                fill(fX, 0.0);
-                fill(fY, 0.0);
-                fill(fZ, 0.0);
-                fill(fXCR, 0.0);
-                fill(fYCR, 0.0);
-                fill(fZCR, 0.0);
             }
 
             @Override
@@ -493,10 +481,9 @@ public class PermanentFieldRegion extends ParallelRegion {
 
         private class PermanentRealSpaceFieldLoop extends IntegerForLoop {
 
+            private int threadID;
             private final double[] dx_local;
             private final double[][] transOp;
-            private double[] fX, fY, fZ;
-            private double[] fXCR, fYCR, fZCR;
             private double[] mask_local;
             private double[] maskp_local;
             private int count;
@@ -512,15 +499,9 @@ public class PermanentFieldRegion extends ParallelRegion {
 
             @Override
             public void start() {
-                int threadIndex = getThreadIndex();
-                realSpacePermTime[threadIndex] -= System.nanoTime();
+                threadID = getThreadIndex();
+                realSpacePermTime[threadID] -= System.nanoTime();
                 count = 0;
-                fX = field[threadIndex][0];
-                fY = field[threadIndex][1];
-                fZ = field[threadIndex][2];
-                fXCR = fieldCR[threadIndex][0];
-                fYCR = fieldCR[threadIndex][1];
-                fZCR = fieldCR[threadIndex][2];
                 int nAtoms = atoms.length;
                 if (mask_local == null || mask_local.length < nAtoms) {
                     mask_local = new double[nAtoms];
@@ -532,9 +513,8 @@ public class PermanentFieldRegion extends ParallelRegion {
 
             @Override
             public void finish() {
-                int threadIndex = getThreadIndex();
                 sharedCount.addAndGet(count);
-                realSpacePermTime[threadIndex] += System.nanoTime();
+                realSpacePermTime[threadID] += System.nanoTime();
             }
 
             @Override
@@ -715,16 +695,12 @@ public class PermanentFieldRegion extends ParallelRegion {
                             final double fkdx = xr * ddr357i - drr3 * dix - drr5 * qix;
                             final double fkdy = yr * ddr357i - drr3 * diy - drr5 * qiy;
                             final double fkdz = zr * ddr357i - drr3 * diz - drr5 * qiz;
-                            fX[k] += (fkmx - fkdx);
-                            fY[k] += (fkmy - fkdy);
-                            fZ[k] += (fkmz - fkdz);
+                            field.add(threadID, k, fkmx - fkdx, fkmy - fkdy, fkmz - fkdz);
                             final double prr357i = prr3 * ci + prr5 * dir + prr7 * qir;
                             final double fkpx = xr * prr357i - prr3 * dix - prr5 * qix;
                             final double fkpy = yr * prr357i - prr3 * diy - prr5 * qiy;
                             final double fkpz = zr * prr357i - prr3 * diz - prr5 * qiz;
-                            fXCR[k] += (fkmx - fkpx);
-                            fYCR[k] += (fkmy - fkpy);
-                            fZCR[k] += (fkmz - fkpz);
+                            fieldCR.add(threadID, k, fkmx - fkpx, fkmy - fkpy, fkmz - fkpz);
                             final double dkr = dkx * xr + dky * yr + dkz * zr;
                             final double qkx = 2.0 * (qkxx * xr + qkxy * yr + qkxz * zr);
                             final double qky = 2.0 * (qkxy * xr + qkyy * yr + qkyz * zr);
@@ -738,16 +714,12 @@ public class PermanentFieldRegion extends ParallelRegion {
                             final double fidx = -xr * drr357k - drr3 * dkx + drr5 * qkx;
                             final double fidy = -yr * drr357k - drr3 * dky + drr5 * qky;
                             final double fidz = -zr * drr357k - drr3 * dkz + drr5 * qkz;
-                            fX[i] += (fimx - fidx);
-                            fY[i] += (fimy - fidy);
-                            fZ[i] += (fimz - fidz);
+                            field.add(threadID, i, fimx - fidx, fimy - fidy, fimz - fidz);
                             final double prr357k = prr3 * ck - prr5 * dkr + prr7 * qkr;
                             final double fipx = -xr * prr357k - prr3 * dkx + prr5 * qkx;
                             final double fipy = -yr * prr357k - prr3 * dky + prr5 * qky;
                             final double fipz = -zr * prr357k - prr3 * dkz + prr5 * qkz;
-                            fXCR[i] += (fimx - fipx);
-                            fYCR[i] += (fimy - fipy);
-                            fZCR[i] += (fimz - fipz);
+                            fieldCR.add(threadID, i, fimx - fipx, fimy - fipy, fimz - fipz);
                         }
                     }
 
@@ -928,29 +900,20 @@ public class PermanentFieldRegion extends ParallelRegion {
                                 final double fix = selfScale * (fimx - fidx);
                                 final double fiy = selfScale * (fimy - fidy);
                                 final double fiz = selfScale * (fimz - fidz);
-                                fX[i] += fix;
-                                fY[i] += fiy;
-                                fZ[i] += fiz;
-                                fXCR[i] += fix;
-                                fYCR[i] += fiy;
-                                fZCR[i] += fiz;
+                                field.add(threadID, i, fix, fiy, fiz);
+                                fieldCR.add(threadID, i, fix, fiy, fiz);
                                 final double xc = selfScale * (fkmx - fkdx);
                                 final double yc = selfScale * (fkmy - fkdy);
                                 final double zc = selfScale * (fkmz - fkdz);
                                 final double fkx = xc * transOp[0][0] + yc * transOp[1][0] + zc * transOp[2][0];
                                 final double fky = xc * transOp[0][1] + yc * transOp[1][1] + zc * transOp[2][1];
                                 final double fkz = xc * transOp[0][2] + yc * transOp[1][2] + zc * transOp[2][2];
-                                fX[k] += fkx;
-                                fY[k] += fky;
-                                fZ[k] += fkz;
-                                fXCR[k] += fkx;
-                                fYCR[k] += fky;
-                                fZCR[k] += fkz;
+                                field.add(threadID, k, fkx, fky, fkz);
+                                fieldCR.add(threadID, k, fkx, fky, fkz);
                             }
                         }
                     }
                 }
-
             }
         }
     }
