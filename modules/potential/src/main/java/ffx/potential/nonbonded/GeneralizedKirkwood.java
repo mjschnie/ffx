@@ -127,13 +127,13 @@ public class GeneralizedKirkwood implements LambdaInterface {
      * Original value of 0.0327 kcal/mol/A^3 is based on using rigorous solvent
      * accessible volumes.
      * <p>
-     * For use with GaussVol volumes (i.e. a vdW volume), a larger solvent pressure of 0.1266 is needed.
+     * For use with GaussVol volumes (i.e. a vdW volume), a larger solvent pressure of 0.125 is needed.
      */
-    private static final double DEFAULT_SOLVENT_PRESSURE = 0.11337;
+    private static final double DEFAULT_SOLVENT_PRESSURE = 0.05185;
     /**
      * Default probe radius for use with Gaussian Volumes.
      */
-    private static final double DEFAULT_GAUSSVOL_PROBE = 0.0;
+    private static final double DEFAULT_GAUSSVOL_PROBE = 1.0;
     /**
      * Default dielectric offset
      **/
