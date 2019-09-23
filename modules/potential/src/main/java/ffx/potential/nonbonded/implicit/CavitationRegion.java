@@ -61,6 +61,9 @@ import ffx.potential.bonded.Atom;
 import ffx.potential.parameters.VDWType;
 import ffx.potential.utils.EnergyException;
 
+/**
+ * Initial port of the TINKER surface area code.
+ */
 public class CavitationRegion extends ParallelRegion {
 
     private static final Logger logger = Logger.getLogger(CavitationRegion.class.getName());

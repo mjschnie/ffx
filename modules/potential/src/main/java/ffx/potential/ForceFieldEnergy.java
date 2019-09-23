@@ -124,7 +124,8 @@ import ffx.potential.utils.PotentialsUtils;
 import static ffx.potential.parameters.ForceField.toEnumForm;
 
 /**
- * Compute the potential energy and derivatives of an AMOEBA system.
+ * Compute the potential energy and derivatives of a molecular system
+ * described by a force field.
  *
  * @author Michael J. Schnieders
  * @since 1.0

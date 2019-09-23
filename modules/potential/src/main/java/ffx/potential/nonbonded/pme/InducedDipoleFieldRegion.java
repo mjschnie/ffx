@@ -40,7 +40,6 @@ package ffx.potential.nonbonded.pme;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import static java.util.Arrays.fill;
 
 import static org.apache.commons.math3.util.FastMath.exp;
 import static org.apache.commons.math3.util.FastMath.min;
@@ -54,24 +53,28 @@ import edu.rit.pj.ParallelTeam;
 
 import ffx.crystal.Crystal;
 import ffx.crystal.SymOp;
-import ffx.numerics.atomic.AtomicDoubleArray;
 import ffx.numerics.atomic.AtomicDoubleArray3D;
 import ffx.potential.bonded.Atom;
 import ffx.potential.nonbonded.ParticleMeshEwald;
 import ffx.potential.nonbonded.ParticleMeshEwald.LambdaMode;
-import ffx.potential.nonbonded.ParticleMeshEwaldCart;
 import ffx.potential.nonbonded.ParticleMeshEwaldCart.EwaldParameters;
-import ffx.potential.nonbonded.ParticleMeshEwaldCart.RealSpaceNeighborParameters;
 import ffx.potential.nonbonded.ParticleMeshEwaldCart.PMETimings;
+import ffx.potential.nonbonded.ParticleMeshEwaldCart.RealSpaceNeighborParameters;
 import ffx.potential.nonbonded.ReciprocalSpace;
 import ffx.potential.parameters.ForceField;
 import static ffx.numerics.special.Erf.erfc;
 
 /**
- * The Induced Dipole Field Region should be executed by a ParallelTeam with
- * exactly 2 threads. The Real Space and Reciprocal Space Sections will be
+ * Parallel calculation of the induced dipole field.
+ * <p>
+ * This region can be executed by a ParallelTeam with exactly 2 threads.
+ * <p>
+ * The Real Space and Reciprocal Space Sections will be
  * run concurrently, each with the number of threads defined by their
  * respective ParallelTeam instances.
+ *
+ * @author Michael J. Schnieders
+ * @since 1.0
  */
 public class InducedDipoleFieldRegion extends ParallelRegion {
 
@@ -212,7 +215,6 @@ public class InducedDipoleFieldRegion extends ParallelRegion {
         this.fieldCR = fieldCR;
         this.realSpaceSCFTotal = pmeTimings.realSpaceSCFTotal;
         this.realSpaceSCFTime = pmeTimings.realSpaceSCFTime;
-
     }
 
     public long getRealSpaceSCFTotal() {
@@ -221,6 +223,7 @@ public class InducedDipoleFieldRegion extends ParallelRegion {
 
     /**
      * Execute the InducedDipoleFieldRegion with the passed ParallelTeam.
+     *
      * @param sectionTeam The ParallelTeam instance to execute with.
      */
     public void executeWith(ParallelTeam sectionTeam) {
@@ -460,7 +463,7 @@ public class InducedDipoleFieldRegion extends ParallelRegion {
                         final double fkdx = -rr3 * uix + rr5uir * xr;
                         final double fkdy = -rr3 * uiy + rr5uir * yr;
                         final double fkdz = -rr3 * uiz + rr5uir * zr;
-                        field.add(threadID, k, fkmx - fkdx, fkmy - fkdy,  fkmz - fkdz);
+                        field.add(threadID, k, fkmx - fkdx, fkmy - fkdy, fkmz - fkdz);
                         final double pir = pix * xr + piy * yr + piz * zr;
                         final double bn2pir = bn2 * pir;
                         final double pkmx = -bn1 * pix + bn2pir * xr;
@@ -470,10 +473,10 @@ public class InducedDipoleFieldRegion extends ParallelRegion {
                         final double pkdx = -rr3 * pix + rr5pir * xr;
                         final double pkdy = -rr3 * piy + rr5pir * yr;
                         final double pkdz = -rr3 * piz + rr5pir * zr;
-                        fieldCR.add(threadID, k, pkmx - pkdx, pkmy - pkdy,  pkmz - pkdz);
+                        fieldCR.add(threadID, k, pkmx - pkdx, pkmy - pkdy, pkmz - pkdz);
                     }
-                    field.add(threadID, i, fx, fy,  fz);
-                    fieldCR.add(threadID, i, px, py,  pz);
+                    field.add(threadID, i, fx, fy, fz);
+                    fieldCR.add(threadID, i, px, py, pz);
                 }
 
                 // Loop over symmetry mates.

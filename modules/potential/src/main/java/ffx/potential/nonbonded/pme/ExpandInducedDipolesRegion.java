@@ -50,6 +50,13 @@ import ffx.crystal.Crystal;
 import ffx.crystal.SymOp;
 import ffx.potential.bonded.Atom;
 
+/**
+ * Parallel expansion of the asymmetric unit induced dipoles to symmetry mates
+ * by applying symmetry operator rotation matrices.
+ *
+ * @author Michael J. Schnieders
+ * @since 1.0
+ */
 public class ExpandInducedDipolesRegion extends ParallelRegion {
 
     private static final Logger logger = Logger.getLogger(ExpandInducedDipolesRegion.class.getName());
@@ -89,6 +96,7 @@ public class ExpandInducedDipolesRegion extends ParallelRegion {
 
     /**
      * Execute the ExpandInducedDipolesRegion with the passed ParallelTeam.
+     *
      * @param parallelTeam The ParallelTeam instance to execute with.
      */
     public void executeWith(ParallelTeam parallelTeam) {

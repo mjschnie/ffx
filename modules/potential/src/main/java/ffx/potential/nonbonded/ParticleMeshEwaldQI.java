@@ -56,7 +56,6 @@ import edu.rit.pj.ParallelRegion;
 import edu.rit.pj.ParallelSection;
 import edu.rit.pj.ParallelTeam;
 import edu.rit.pj.reduction.SharedDouble;
-import edu.rit.pj.reduction.SharedDoubleArray;
 import edu.rit.pj.reduction.SharedInteger;
 import edu.rit.util.Range;
 
@@ -83,14 +82,14 @@ import ffx.potential.parameters.ForceField.ForceFieldString;
 import ffx.potential.parameters.MultipoleType;
 import ffx.potential.parameters.PolarizeType;
 import ffx.potential.utils.EnergyException;
-import static ffx.numerics.special.Erf.erfc;
-import static ffx.numerics.multipole.MultipoleTensor.checkDampingCriterion;
 import static ffx.numerics.math.VectorMath.cross;
 import static ffx.numerics.math.VectorMath.diff;
 import static ffx.numerics.math.VectorMath.dot;
 import static ffx.numerics.math.VectorMath.r;
 import static ffx.numerics.math.VectorMath.scalar;
 import static ffx.numerics.math.VectorMath.sum;
+import static ffx.numerics.multipole.MultipoleTensor.checkDampingCriterion;
+import static ffx.numerics.special.Erf.erfc;
 import static ffx.potential.nonbonded.ParticleMeshEwald.Polarization.MUTUAL;
 import static ffx.potential.parameters.MultipoleType.checkMultipoleChirality;
 import static ffx.potential.parameters.MultipoleType.t000;
@@ -670,7 +669,7 @@ public class ParticleMeshEwaldQI extends ParticleMeshEwald {
             m14scale = forceField.getDouble(ForceFieldDouble.MPOLE_14_SCALE, 0.4);
             m15scale = forceField.getDouble(ForceFieldDouble.MPOLE_15_SCALE, 0.8);
         } else {
-            double mpole14 = forceField.getDouble(ForceFieldDouble.CHG_14_SCALE,  2.0);
+            double mpole14 = forceField.getDouble(ForceFieldDouble.CHG_14_SCALE, 2.0);
             mpole14 = 1.0 / mpole14;
             m12scale = forceField.getDouble(ForceFieldDouble.MPOLE_12_SCALE, 0.0);
             m13scale = forceField.getDouble(ForceFieldDouble.MPOLE_13_SCALE, 0.0);
@@ -1996,12 +1995,15 @@ public class ParticleMeshEwaldQI extends ParticleMeshEwald {
     protected double[][][] getGradient() {
         return grad;
     }
+
     protected double[][][] getTorque() {
         return torque;
     }
+
     protected double[][][] getLambdaGradient() {
         return lambdaGrad;
     }
+
     protected double[][][] getLambdaTorque() {
         return lambdaTorque;
     }
@@ -3467,7 +3469,7 @@ public class ParticleMeshEwaldQI extends ParticleMeshEwald {
                      * Initialize the electric field to the direct field plus
                      * the permanent GK reaction field.
                      */
-                    AtomicDoubleArray3D gkField = generalizedKirkwood.sharedGKField;
+                    AtomicDoubleArray3D gkField = generalizedKirkwood.getFieldGK();
                     for (int i = lb; i <= ub; i++) {
                         double fx = gkField.getX(i);
                         double fy = gkField.getY(i);
@@ -3635,8 +3637,8 @@ public class ParticleMeshEwaldQI extends ParticleMeshEwald {
                     }
                 }
                 if (generalizedKirkwoodTerm) {
-                    AtomicDoubleArray3D gkField = generalizedKirkwood.sharedGKField;
-                    AtomicDoubleArray3D gkFieldCR = generalizedKirkwood.sharedGKFieldCR;
+                    AtomicDoubleArray3D gkField = generalizedKirkwood.getFieldGK();
+                    AtomicDoubleArray3D gkFieldCR = generalizedKirkwood.getFieldGKCR();
                     /**
                      * Add the GK reaction field to the intramolecular field.
                      */
@@ -7754,8 +7756,8 @@ public class ParticleMeshEwaldQI extends ParticleMeshEwald {
                     }
                 }
                 if (generalizedKirkwoodTerm) {
-                    AtomicDoubleArray3D gkField = generalizedKirkwood.sharedGKField;
-                    AtomicDoubleArray3D gkFieldCR = generalizedKirkwood.sharedGKFieldCR;
+                    AtomicDoubleArray3D gkField = generalizedKirkwood.getFieldGK();
+                    AtomicDoubleArray3D gkFieldCR = generalizedKirkwood.getFieldGKCR();
                     /**
                      * Add the GK reaction field to the intramolecular field.
                      */

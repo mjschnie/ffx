@@ -79,6 +79,12 @@ import static ffx.potential.parameters.MultipoleType.t201;
 import static ffx.potential.parameters.MultipoleType.t210;
 import static ffx.potential.parameters.MultipoleType.t300;
 
+/**
+ * Parallel evaluation of the PME reciprocal space energy and gradient.
+ *
+ * @author Michael J. Schnieders
+ * @since 1.0
+ */
 public class ReciprocalEnergyRegion extends ParallelRegion {
 
     private static final Logger logger = Logger.getLogger(ReciprocalEnergyRegion.class.getName());
@@ -268,6 +274,7 @@ public class ReciprocalEnergyRegion extends ParallelRegion {
 
     /**
      * Execute the ReciprocalEnergyRegion with the passed ParallelTeam.
+     *
      * @param parallelTeam The ParallelTeam instance to execute with.
      */
     public void executeWith(ParallelTeam parallelTeam) {

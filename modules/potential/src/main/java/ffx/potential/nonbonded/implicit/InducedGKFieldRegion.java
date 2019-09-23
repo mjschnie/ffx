@@ -40,15 +40,12 @@ package ffx.potential.nonbonded.implicit;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import static java.util.Arrays.fill;
 
 import static org.apache.commons.math3.util.FastMath.exp;
 import static org.apache.commons.math3.util.FastMath.sqrt;
 
 import edu.rit.pj.IntegerForLoop;
 import edu.rit.pj.ParallelRegion;
-import edu.rit.pj.reduction.DoubleOp;
-import edu.rit.pj.reduction.SharedDoubleArray;
 
 import ffx.crystal.Crystal;
 import ffx.crystal.SymOp;
@@ -58,8 +55,9 @@ import ffx.potential.parameters.ForceField;
 import static ffx.potential.nonbonded.GeneralizedKirkwood.dWater;
 
 /**
- * Compute the Generalized Kirkwood induced reaction field in parallel.
+ * Parallel calculation of the Generalized Kirkwood induced reaction field.
  *
+ * @author Michael J. Schnieders
  * @since 1.0
  */
 public class InducedGKFieldRegion extends ParallelRegion {

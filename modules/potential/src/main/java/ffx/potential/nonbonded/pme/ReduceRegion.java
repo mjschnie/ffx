@@ -58,6 +58,12 @@ import static ffx.numerics.math.VectorMath.r;
 import static ffx.numerics.math.VectorMath.scalar;
 import static ffx.numerics.math.VectorMath.sum;
 
+/**
+ * Parallel conversion of torques into forces, and then reduce them.
+ *
+ * @author Michael J. Schnieders
+ * @since 1.0
+ */
 public class ReduceRegion extends ParallelRegion {
 
     private static final Logger logger = Logger.getLogger(ReduceRegion.class.getName());
@@ -138,6 +144,7 @@ public class ReduceRegion extends ParallelRegion {
 
     /**
      * Execute the ReduceRegion with the passed ParallelTeam.
+     *
      * @param parallelTeam The ParallelTeam instance to execute with.
      */
     public void excuteWith(ParallelTeam parallelTeam) {

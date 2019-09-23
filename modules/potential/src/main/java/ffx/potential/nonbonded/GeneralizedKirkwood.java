@@ -53,7 +53,6 @@ import ffx.crystal.Crystal;
 import ffx.numerics.atomic.AtomicDoubleArray;
 import ffx.numerics.atomic.AtomicDoubleArray.AtomicDoubleArrayImpl;
 import ffx.numerics.atomic.AtomicDoubleArray3D;
-import ffx.numerics.atomic.MultiDoubleArray;
 import ffx.potential.bonded.Atom;
 import ffx.potential.bonded.LambdaInterface;
 import ffx.potential.nonbonded.ParticleMeshEwald.Polarization;
@@ -84,6 +83,7 @@ import static ffx.potential.parameters.ForceField.toEnumForm;
  * Schnieders and J. W. Ponder, Polarizable atomic multipole solutes in a
  * generalized Kirkwood continuum, Journal of Chemical Theory and Computation
  * 2007, 3, (6), 2083-2097.</a><br>
+ * @since 1.0
  */
 public class GeneralizedKirkwood implements LambdaInterface {
 
@@ -260,17 +260,17 @@ public class GeneralizedKirkwood implements LambdaInterface {
      */
     private AtomicDoubleArray3D torque;
     /**
-     * Atomic Born radii gradient array.
+     * Atomic Born radii chain-rule array.
      */
-    private AtomicDoubleArray sharedBornGrad;
+    private AtomicDoubleArray bornRadiiChainRule;
     /**
      * Atomic GK field array.
      */
-    public AtomicDoubleArray3D sharedGKField;
+    private AtomicDoubleArray3D fieldGK;
     /**
      * Atomic GK field chain-rule array.
      */
-    public AtomicDoubleArray3D sharedGKFieldCR;
+    private AtomicDoubleArray3D fieldGKCR;
 
     /**
      * Neighbor lists for each atom and symmetry operator.
@@ -468,8 +468,8 @@ public class GeneralizedKirkwood implements LambdaInterface {
         nonPolar = nonpolarModel;
 
         int threadCount = parallelTeam.getThreadCount();
-        sharedGKField = new AtomicDoubleArray3D(atomicDoubleArrayImpl, nAtoms, threadCount);
-        sharedGKFieldCR = new AtomicDoubleArray3D(atomicDoubleArrayImpl, nAtoms, threadCount);
+        fieldGK = new AtomicDoubleArray3D(atomicDoubleArrayImpl, nAtoms, threadCount);
+        fieldGKCR = new AtomicDoubleArray3D(atomicDoubleArrayImpl, nAtoms, threadCount);
 
         nativeEnvironmentApproximation = forceField.getBoolean(
                 ForceField.ForceFieldBoolean.NATIVE_ENVIRONMENT_APPROXIMATION, false);
@@ -639,7 +639,7 @@ public class GeneralizedKirkwood implements LambdaInterface {
     }
 
     public void init() {
-        initializationRegion.init(atoms, lambdaTerm, grad, torque, sharedBornGrad);
+        initializationRegion.init(atoms, lambdaTerm, grad, torque, bornRadiiChainRule);
         initializationRegion.executeWith(parallelTeam);
     }
 
@@ -649,6 +649,14 @@ public class GeneralizedKirkwood implements LambdaInterface {
 
     public AtomicDoubleArray3D getTorque() {
         return torque;
+    }
+
+    public AtomicDoubleArray3D getFieldGK() {
+        return fieldGK;
+    }
+
+    public AtomicDoubleArray3D getFieldGKCR() {
+        return fieldGKCR;
     }
 
     public void reduce(AtomicDoubleArray3D g, AtomicDoubleArray3D t,
@@ -817,15 +825,15 @@ public class GeneralizedKirkwood implements LambdaInterface {
             int threadCount = parallelTeam.getThreadCount();
             grad = new AtomicDoubleArray3D(atomicDoubleArrayImpl, nAtoms, threadCount);
             torque = new AtomicDoubleArray3D(atomicDoubleArrayImpl, nAtoms, threadCount);
-            sharedBornGrad = atomicDoubleArrayFactory(atomicDoubleArrayImpl, threadCount, nAtoms);
+            bornRadiiChainRule = atomicDoubleArrayFactory(atomicDoubleArrayImpl, threadCount, nAtoms);
         } else {
             grad.alloc(nAtoms);
             torque.alloc(nAtoms);
-            sharedBornGrad.alloc(nAtoms);
+            bornRadiiChainRule.alloc(nAtoms);
         }
 
-        sharedGKField.alloc(nAtoms);
-        sharedGKFieldCR.alloc(nAtoms);
+        fieldGK.alloc(nAtoms);
+        fieldGKCR.alloc(nAtoms);
 
         if (baseRadius == null || baseRadius.length < nAtoms) {
             baseRadius = new double[nAtoms];
@@ -930,11 +938,11 @@ public class GeneralizedKirkwood implements LambdaInterface {
      */
     public void computePermanentGKField() {
         try {
-            sharedGKField.reset(parallelTeam, 0, nAtoms - 1);
+            fieldGK.reset(parallelTeam, 0, nAtoms - 1);
             permanentGKFieldRegion.init(atoms, globalMultipole, crystal, sXYZ, neighborLists,
-                    use, cut2, born, sharedGKField);
+                    use, cut2, born, fieldGK);
             parallelTeam.execute(permanentGKFieldRegion);
-            sharedGKField.reduce(parallelTeam, 0, nAtoms - 1);
+            fieldGK.reduce(parallelTeam, 0, nAtoms - 1);
         } catch (Exception e) {
             String message = "Fatal exception computing permanent GK field.";
             logger.log(Level.SEVERE, message, e);
@@ -947,13 +955,13 @@ public class GeneralizedKirkwood implements LambdaInterface {
      */
     public void computeInducedGKField() {
         try {
-            sharedGKField.reset(parallelTeam, 0, nAtoms - 1);
-            sharedGKFieldCR.reset(parallelTeam, 0, nAtoms - 1);
+            fieldGK.reset(parallelTeam, 0, nAtoms - 1);
+            fieldGKCR.reset(parallelTeam, 0, nAtoms - 1);
             inducedGKFieldRegion.init(atoms, inducedDipole, inducedDipoleCR, crystal, sXYZ, neighborLists,
-                    use, cut2, born, sharedGKField, sharedGKFieldCR);
+                    use, cut2, born, fieldGK, fieldGKCR);
             parallelTeam.execute(inducedGKFieldRegion);
-            sharedGKField.reduce(parallelTeam, 0, nAtoms - 1);
-            sharedGKFieldCR.reduce(parallelTeam, 0, nAtoms - 1);
+            fieldGK.reduce(parallelTeam, 0, nAtoms - 1);
+            fieldGKCR.reduce(parallelTeam, 0, nAtoms - 1);
         } catch (Exception e) {
             String message = "Fatal exception computing induced GK field.";
             logger.log(Level.SEVERE, message, e);
@@ -988,7 +996,7 @@ public class GeneralizedKirkwood implements LambdaInterface {
             gkTime = -System.nanoTime();
             gkEnergyRegion.init(atoms, globalMultipole, inducedDipole, inducedDipoleCR,
                     crystal, sXYZ, neighborLists, use, cut2, baseRadius, born,
-                    gradient, grad, torque, sharedBornGrad);
+                    gradient, grad, torque, bornRadiiChainRule);
             parallelTeam.execute(gkEnergyRegion);
             gkTime += System.nanoTime();
 
@@ -1055,7 +1063,7 @@ public class GeneralizedKirkwood implements LambdaInterface {
                 gkTime -= System.nanoTime();
                 bornGradRegion.init(atoms, crystal, sXYZ, neighborLists, baseRadius,
                         overlapScale, use, cut2, nativeEnvironmentApproximation,
-                        born, grad, sharedBornGrad);
+                        born, grad, bornRadiiChainRule);
                 bornGradRegion.executeWith(parallelTeam);
                 gkTime += System.nanoTime();
             } catch (Exception e) {

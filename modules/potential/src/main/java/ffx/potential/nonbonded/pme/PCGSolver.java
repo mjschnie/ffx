@@ -41,7 +41,6 @@ import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import static java.lang.String.format;
-import static java.util.Arrays.fill;
 
 import static org.apache.commons.math3.util.FastMath.exp;
 import static org.apache.commons.math3.util.FastMath.max;
@@ -66,7 +65,10 @@ import ffx.potential.utils.EnergyException;
 import static ffx.numerics.special.Erf.erfc;
 
 /**
- * Pre-conditioned conjugate gradient solver for the self-consistent field.
+ * Parallel pre-conditioned conjugate gradient solver for the self-consistent field.
+ *
+ * @author Michael J. Schnieders
+ * @since 1.0
  */
 public class PCGSolver {
 
@@ -124,7 +126,7 @@ public class PCGSolver {
     int[][] preconditionerCounts;
     public double preconditionerCutoff;
     public double preconditionerEwald = 0.0;
-    public final int preconditionerListSize = 50;
+    private final int preconditionerListSize = 50;
 
     /**
      * An ordered array of atoms in the system.
@@ -195,10 +197,11 @@ public class PCGSolver {
 
     /**
      * Constructor the PCG solver.
+     *
      * @param maxThreads Number of threads.
-     * @param poleps Convergence criteria (RMS Debye).
+     * @param poleps     Convergence criteria (RMS Debye).
      * @param forceField Force field in use.
-     * @param nAtoms Initial number of atoms.
+     * @param nAtoms     Initial number of atoms.
      */
     public PCGSolver(int maxThreads, double poleps, ForceField forceField, int nAtoms) {
         this.poleps = poleps;
@@ -222,6 +225,7 @@ public class PCGSolver {
 
     /**
      * Allocate PCG vectors.
+     *
      * @param nAtoms The number of atoms.
      */
     public void allocateVectors(int nAtoms) {
@@ -239,7 +243,8 @@ public class PCGSolver {
 
     /**
      * Allocate storage for pre-conditioner neighbor list.
-     * @param nSymm Number of symmetry operators.
+     *
+     * @param nSymm  Number of symmetry operators.
      * @param nAtoms Number of atoms.
      */
     public void allocateLists(int nSymm, int nAtoms) {
@@ -898,11 +903,9 @@ public class PCGSolver {
      * (~3-4 A).
      */
     private class InducedDipolePreconditionerRegion extends ParallelRegion {
-        private final int maxThreads;
         private final InducedPreconditionerFieldLoop[] inducedPreconditionerFieldLoop;
 
-        public InducedDipolePreconditionerRegion(int threadCount) {
-            maxThreads = threadCount;
+        InducedDipolePreconditionerRegion(int threadCount) {
             inducedPreconditionerFieldLoop = new InducedPreconditionerFieldLoop[threadCount];
         }
 
@@ -1068,7 +1071,7 @@ public class PCGSolver {
                         final double fkdx = -rr3 * uix + rr5uir * xr;
                         final double fkdy = -rr3 * uiy + rr5uir * yr;
                         final double fkdz = -rr3 * uiz + rr5uir * zr;
-                        field.add(threadID, k, fkmx - fkdx, fkmy - fkdy,  fkmz - fkdz);
+                        field.add(threadID, k, fkmx - fkdx, fkmy - fkdy, fkmz - fkdz);
                         final double pir = pix * xr + piy * yr + piz * zr;
                         final double bn2pir = bn2 * pir;
                         final double pkmx = -bn1 * pix + bn2pir * xr;
@@ -1078,7 +1081,7 @@ public class PCGSolver {
                         final double pkdx = -rr3 * pix + rr5pir * xr;
                         final double pkdy = -rr3 * piy + rr5pir * yr;
                         final double pkdz = -rr3 * piz + rr5pir * zr;
-                        fieldCR.add(threadID, k, pkmx - pkdx, pkmy - pkdy,  pkmz - pkdz);
+                        fieldCR.add(threadID, k, pkmx - pkdx, pkmy - pkdy, pkmz - pkdz);
                     }
                     field.add(threadID, i, fx, fy, fz);
                     fieldCR.add(threadID, i, px, py, pz);

@@ -39,7 +39,6 @@ package ffx.potential.nonbonded.implicit;
 
 import java.util.logging.Level;
 import java.util.logging.Logger;
-
 import static java.lang.String.format;
 
 import edu.rit.pj.IntegerForLoop;
@@ -51,6 +50,12 @@ import ffx.numerics.atomic.AtomicDoubleArray;
 import ffx.numerics.atomic.AtomicDoubleArray3D;
 import ffx.potential.bonded.Atom;
 
+/**
+ * Parallel initialization of accumulation arrays for Generalized Kirkwood.
+ *
+ * @author Michael J. Schnieders
+ * @since 1.0
+ */
 public class InitializationRegion extends ParallelRegion {
 
     private static final Logger logger = Logger.getLogger(InitializationRegion.class.getName());

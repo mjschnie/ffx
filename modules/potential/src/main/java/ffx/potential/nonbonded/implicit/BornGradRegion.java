@@ -59,8 +59,9 @@ import ffx.potential.bonded.Atom;
 import ffx.potential.utils.EnergyException;
 
 /**
- * Compute Born radii chain rule terms in parallel via the Grycuk method.
+ * Parallel computation of Born radii chain rule terms via the Grycuk method.
  *
+ * @author Michael J. Schnieders
  * @since 1.0
  */
 public class BornGradRegion extends ParallelRegion {

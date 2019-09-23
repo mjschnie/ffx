@@ -40,6 +40,8 @@ package ffx.potential.nonbonded.pme;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import static java.lang.Double.isInfinite;
+import static java.lang.Double.isNaN;
 import static java.lang.String.format;
 import static java.util.Arrays.fill;
 
@@ -61,6 +63,7 @@ import ffx.potential.bonded.Angle;
 import ffx.potential.bonded.Atom;
 import ffx.potential.bonded.Bond;
 import ffx.potential.bonded.Torsion;
+import ffx.potential.nonbonded.MaskingInterface;
 import ffx.potential.nonbonded.ParticleMeshEwald;
 import ffx.potential.nonbonded.ParticleMeshEwald.ELEC_FORM;
 import ffx.potential.nonbonded.ParticleMeshEwald.LambdaMode;
@@ -92,10 +95,12 @@ import static ffx.potential.parameters.MultipoleType.t110;
 import static ffx.potential.parameters.MultipoleType.t200;
 
 /**
- * The Real Space Energy Region class parallelizes evaluation of the real
- * space energy and gradient.
+ * Parallel evaluation of the PME real space energy and gradient.
+ *
+ * @author Michael J. Schnieders
+ * @since 1.0
  */
-public class RealSpaceEnergyRegion extends ParallelRegion {
+public class RealSpaceEnergyRegion extends ParallelRegion implements MaskingInterface {
 
     private static final Logger logger = Logger.getLogger(RealSpaceEnergyRegion.class.getName());
 
@@ -274,7 +279,7 @@ public class RealSpaceEnergyRegion extends ParallelRegion {
     private double permanentEnergy;
     private double polarizationEnergy;
     private final SharedInteger sharedInteractions;
-    public final RealSpaceEnergyLoop[] realSpaceEnergyLoop;
+    private final RealSpaceEnergyLoop[] realSpaceEnergyLoop;
 
     private ScaleParameters scaleParameters;
 
@@ -420,12 +425,12 @@ public class RealSpaceEnergyRegion extends ParallelRegion {
         polarizationEnergy = 0.0;
         for (int i = 0; i < maxThreads; i++) {
             double e = realSpaceEnergyLoop[i].permanentEnergy;
-            if (Double.isNaN(e)) {
+            if (isNaN(e)) {
                 throw new EnergyException(format(" The permanent multipole energy of thread %d is %16.8f", i, e), false);
             }
             permanentEnergy += e;
             double ei = realSpaceEnergyLoop[i].inducedEnergy;
-            if (Double.isNaN(ei)) {
+            if (isNaN(ei)) {
                 throw new EnergyException(format(" The polarization energyof thread %d is %16.8f", i, ei), false);
             }
             polarizationEnergy += ei;
@@ -436,6 +441,89 @@ public class RealSpaceEnergyRegion extends ParallelRegion {
 
     public int getCount(int i) {
         return realSpaceEnergyLoop[i].getCount();
+    }
+
+    @Override
+    public void applyMask(int i, boolean[] is14, double[]... masks) {
+        Atom ai = atoms[i];
+        double[] masking_local = masks[0];
+        double[] maskingp_local = masks[1];
+        double[] maskingd_local = masks[2];
+        for (Atom ak : ai.get1_5s()) {
+            masking_local[ak.getIndex() - 1] = scaleParameters.m15scale;
+        }
+        for (Torsion torsion : ai.getTorsions()) {
+            Atom ak = torsion.get1_4(ai);
+            if (ak != null) {
+                int index = ak.getIndex() - 1;
+                masking_local[index] = scaleParameters.m14scale;
+                maskingp_local[index] = scaleParameters.p14scale;
+                for (int j : ip11[i]) {
+                    if (j == index) {
+                        maskingp_local[index] = scaleParameters.intra14Scale * scaleParameters.p14scale;
+                        break;
+                    }
+                }
+            }
+        }
+        for (Angle angle : ai.getAngles()) {
+            Atom ak = angle.get1_3(ai);
+            if (ak != null) {
+                int index = ak.getIndex() - 1;
+                maskingp_local[index] = scaleParameters.p13scale;
+                masking_local[index] = scaleParameters.m13scale;
+            }
+        }
+        for (Bond bond : ai.getBonds()) {
+            int index = bond.get1_2(ai).getIndex() - 1;
+            maskingp_local[index] = scaleParameters.p12scale;
+            masking_local[index] = scaleParameters.m12scale;
+        }
+        for (int j : ip11[i]) {
+            maskingd_local[j] = scaleParameters.d11scale;
+        }
+    }
+
+    @Override
+    public void removeMask(int i, boolean[] is14, double[]... masks) {
+        Atom ai = atoms[i];
+        double[] masking_local = masks[0];
+        double[] maskingp_local = masks[1];
+        double[] maskingd_local = masks[2];
+        for (Atom ak : ai.get1_5s()) {
+            int index = ak.getIndex() - 1;
+            masking_local[index] = 1.0;
+            maskingp_local[index] = 1.0;
+        }
+        for (Torsion torsion : ai.getTorsions()) {
+            Atom ak = torsion.get1_4(ai);
+            if (ak != null) {
+                int index = ak.getIndex() - 1;
+                masking_local[index] = 1.0;
+                maskingp_local[index] = 1.0;
+                for (int j : ip11[i]) {
+                    if (j == index) {
+                        maskingp_local[index] = 1.0;
+                    }
+                }
+            }
+        }
+        for (Angle angle : ai.getAngles()) {
+            Atom ak = angle.get1_3(ai);
+            if (ak != null) {
+                int index = ak.getIndex() - 1;
+                masking_local[index] = 1.0;
+                maskingp_local[index] = 1.0;
+            }
+        }
+        for (Bond bond : ai.getBonds()) {
+            int index = bond.get1_2(ai).getIndex() - 1;
+            masking_local[index] = 1.0;
+            maskingp_local[index] = 1.0;
+        }
+        for (int j : ip11[i]) {
+            maskingd_local[j] = 1.0;
+        }
     }
 
     /**
@@ -640,38 +728,7 @@ public class RealSpaceEnergyRegion extends ParallelRegion {
                 final Atom ai = atoms[i];
                 final int moleculei = molecule[i];
                 if (iSymm == 0) {
-                    for (Atom ak : ai.get1_5s()) {
-                        masking_local[ak.getIndex() - 1] = scaleParameters.m15scale;
-                    }
-                    for (Torsion torsion : ai.getTorsions()) {
-                        Atom ak = torsion.get1_4(ai);
-                        if (ak != null) {
-                            int index = ak.getIndex() - 1;
-                            masking_local[index] = scaleParameters.m14scale;
-                            maskingp_local[index] = scaleParameters.p14scale;
-                            for (int j : ip11[i]) {
-                                if (j == index) {
-                                    maskingp_local[index] = scaleParameters.intra14Scale * scaleParameters.p14scale;
-                                }
-                            }
-                        }
-                    }
-                    for (Angle angle : ai.getAngles()) {
-                        Atom ak = angle.get1_3(ai);
-                        if (ak != null) {
-                            int index = ak.getIndex() - 1;
-                            maskingp_local[index] = scaleParameters.p13scale;
-                            masking_local[index] = scaleParameters.m13scale;
-                        }
-                    }
-                    for (Bond bond : ai.getBonds()) {
-                        int index = bond.get1_2(ai).getIndex() - 1;
-                        maskingp_local[index] = scaleParameters.p12scale;
-                        masking_local[index] = scaleParameters.m12scale;
-                    }
-                    for (int j : ip11[i]) {
-                        maskingd_local[j] = scaleParameters.d11scale;
-                    }
+                    applyMask(i, null, masking_local, maskingp_local, maskingd_local);
                 }
                 final double xi = x[i];
                 final double yi = y[i];
@@ -702,6 +759,8 @@ public class RealSpaceEnergyRegion extends ParallelRegion {
                 final int npair = realSpaceCounts[iSymm][i];
                 for (int j = 0; j < npair; j++) {
                     k = list[j];
+                    // for (int k : list) {
+
                     if (!use[k]) {
                         continue;
                     }
@@ -812,12 +871,10 @@ public class RealSpaceEnergyRegion extends ParallelRegion {
                     if (doPermanentRealSpace) {
                         double ei = permanentPair();
                         //log(i,k,r,ei);
-                        if (Double.isNaN(ei) || Double.isInfinite(ei)) {
-                            String message = format(" %s\n %s\n %s\n "
-                                            + "The permanent multipole energy between "
-                                            + "atoms %d and %d (%d) is %16.8f at "
-                                            + "%16.8f A.", crystal.getUnitCell().toString(),
-                                    atoms[i].toString(), atoms[k].toString(), i, k, iSymm, ei, r);
+                        if (isNaN(ei) || isInfinite(ei)) {
+                            String message = format(" %s\n %s\n %s\n The permanent multipole energy between "
+                                            + "atoms %d and %d (%d) is %16.8f at %16.8f A.",
+                                    crystal.getUnitCell().toString(), atoms[i].toString(), atoms[k].toString(), i, k, iSymm, ei, r);
                             throw new EnergyException(message, false);
                         }
                         permanentEnergy += ei;
@@ -879,7 +936,7 @@ public class RealSpaceEnergyRegion extends ParallelRegion {
                             }
                         }
                         double ei = polarizationPair();
-                        if (Double.isNaN(ei) || Double.isInfinite(ei)) {
+                        if (isNaN(ei) || isInfinite(ei)) {
                             String message = format(" %s\n"
                                             + " %s\n with induced dipole: %8.3f %8.3f %8.3f\n"
                                             + " %s\n with induced dipole: %8.3f %8.3f %8.3f\n"
@@ -893,40 +950,7 @@ public class RealSpaceEnergyRegion extends ParallelRegion {
                     }
                 }
                 if (iSymm == 0) {
-                    for (Atom ak : ai.get1_5s()) {
-                        int index = ak.getIndex() - 1;
-                        masking_local[index] = 1.0;
-                        maskingp_local[index] = 1.0;
-                    }
-                    for (Torsion torsion : ai.getTorsions()) {
-                        Atom ak = torsion.get1_4(ai);
-                        if (ak != null) {
-                            int index = ak.getIndex() - 1;
-                            masking_local[index] = 1.0;
-                            maskingp_local[index] = 1.0;
-                            for (int j : ip11[i]) {
-                                if (j == index) {
-                                    maskingp_local[index] = 1.0;
-                                }
-                            }
-                        }
-                    }
-                    for (Angle angle : ai.getAngles()) {
-                        Atom ak = angle.get1_3(ai);
-                        if (ak != null) {
-                            int index = ak.getIndex() - 1;
-                            masking_local[index] = 1.0;
-                            maskingp_local[index] = 1.0;
-                        }
-                    }
-                    for (Bond bond : ai.getBonds()) {
-                        int index = bond.get1_2(ai).getIndex() - 1;
-                        masking_local[index] = 1.0;
-                        maskingp_local[index] = 1.0;
-                    }
-                    for (int j : ip11[i]) {
-                        maskingd_local[j] = 1.0;
-                    }
+                    removeMask(i, null, masking_local, maskingp_local, maskingd_local);
                 }
             }
         }

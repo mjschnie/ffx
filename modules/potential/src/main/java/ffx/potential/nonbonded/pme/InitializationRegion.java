@@ -71,6 +71,13 @@ import static ffx.potential.parameters.MultipoleType.t101;
 import static ffx.potential.parameters.MultipoleType.t110;
 import static ffx.potential.parameters.MultipoleType.t200;
 
+/**
+ * Parallel initialization of accumulation arrays, expand atomic coordinates
+ * and rotation of multipoles into the global frame.
+ *
+ * @author Michael J. Schnieders
+ * @since 1.0
+ */
 public class InitializationRegion extends ParallelRegion {
 
     private static final Logger logger = Logger.getLogger(InitializationRegion.class.getName());
@@ -224,6 +231,7 @@ public class InitializationRegion extends ParallelRegion {
 
     /**
      * Execute the InitializationRegion with the passed ParallelTeam.
+     *
      * @param parallelTeam The ParallelTeam instance to execute with.
      */
     public void executeWith(ParallelTeam parallelTeam) {

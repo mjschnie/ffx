@@ -57,8 +57,9 @@ import ffx.potential.bonded.Atom;
 import ffx.potential.parameters.VDWType;
 
 /**
- * Compute Dispersion energy in parallel via pairwise descreening.
+ * Parallel calculation of continuum dispersion energy via pairwise descreening.
  *
+ * @author Michael J. Schnieders
  * @since 1.0
  */
 public class DispersionRegion extends ParallelRegion {
@@ -509,7 +510,7 @@ public class DispersionRegion extends ParallelRegion {
                     double dedx = de * xr;
                     double dedy = de * yr;
                     double dedz = de * zr;
-                    grad.add(threadID, i,  dedx, dedy, dedz);
+                    grad.add(threadID, i, dedx, dedy, dedz);
                     grad.sub(threadID, k, dedx, dedy, dedz);
                 }
             }

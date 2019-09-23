@@ -53,6 +53,12 @@ import static ffx.potential.parameters.MultipoleType.t001;
 import static ffx.potential.parameters.MultipoleType.t010;
 import static ffx.potential.parameters.MultipoleType.t100;
 
+/**
+ * Parallel computation of induced dipoles due to the direct field.
+ *
+ * @author Michael J. Schnieders
+ * @since 1.0
+ */
 public class DirectRegion extends ParallelRegion {
 
     private static final Logger logger = Logger.getLogger(DirectRegion.class.getName());
@@ -175,11 +181,11 @@ public class DirectRegion extends ParallelRegion {
             }
             if (generalizedKirkwoodTerm) {
                 // Set the electric field to the direct field plus the permanent GK reaction field.
-                AtomicDoubleArray3D gkField = generalizedKirkwood.sharedGKField;
+                AtomicDoubleArray3D fieldGK = generalizedKirkwood.getFieldGK();
                 for (int i = lb; i <= ub; i++) {
-                    double fx = gkField.getX(i);
-                    double fy = gkField.getY(i);
-                    double fz = gkField.getZ(i);
+                    double fx = fieldGK.getX(i);
+                    double fy = fieldGK.getY(i);
+                    double fz = fieldGK.getZ(i);
                     field.add(threadID, i, fx, fy, fz);
                     fieldCR.add(threadID, i, fx, fy, fz);
                 }

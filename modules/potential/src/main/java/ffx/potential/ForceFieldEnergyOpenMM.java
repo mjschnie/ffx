@@ -3186,13 +3186,13 @@ public class ForceFieldEnergyOpenMM extends ForceFieldEnergy {
             fill(mask, 1.0);
             for (int i = 0; i < nAtoms; i++) {
                 OpenMM_IntArray_append(exclusions, i);
-                vdW.applyMask(mask, vdw14, i);
+                vdW.applyMask(i, vdw14, mask);
                 for (int j = 0; j < nAtoms; j++) {
                     if (mask[j] == 0.0) {
                         OpenMM_IntArray_append(exclusions, j);
                     }
                 }
-                vdW.removeMask(mask, vdw14, i);
+                vdW.removeMask(i, vdw14, mask);
                 OpenMM_AmoebaVdwForce_setParticleExclusions(amoebaVDWForce, i, exclusions);
                 OpenMM_IntArray_resize(exclusions, 0);
             }

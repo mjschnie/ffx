@@ -72,8 +72,9 @@ import static ffx.potential.parameters.MultipoleType.t110;
 import static ffx.potential.parameters.MultipoleType.t200;
 
 /**
- * Compute the Generalized Kirkwood reaction field energy.
+ * Parallel calculation of the Generalized Kirkwood reaction field energy.
  *
+ * @author Michael J. Schnieders
  * @since 1.0
  */
 public class GKEnergyRegion extends ParallelRegion {
@@ -277,8 +278,6 @@ public class GKEnergyRegion extends ParallelRegion {
         private final double[] gqxy;
         private final double[] gqxz;
         private final double[] gqyz;
-        //private double[] gb_local;
-        //private double[] gbi_local;
         private final double[] dx_local;
         private double ci, uxi, uyi, uzi, qxxi, qxyi, qxzi, qyyi, qyzi, qzzi;
         private double ck, uxk, uyk, uzk, qxxk, qxyk, qxzk, qyyk, qyzk, qzzk;
@@ -286,6 +285,10 @@ public class GKEnergyRegion extends ParallelRegion {
         private double dxk, dyk, dzk, pxk, pyk, pzk, sxk, syk, szk;
         private double xr, yr, zr, xr2, yr2, zr2, rbi, rbk;
         private double xi, yi, zi;
+        private double dedxi, dedyi, dedzi;
+        private double dborni;
+        private double trqxi, trqyi, trqzi;
+
         private boolean gradient = false;
         private int count;
         private int iSymm;
@@ -319,18 +322,9 @@ public class GKEnergyRegion extends ParallelRegion {
 
         @Override
         public void start() {
-            int nAtoms = atoms.length;
-//            if (gb_local == null || gb_local.length != nAtoms) {
-//                gb_local = new double[nAtoms];
-//                gbi_local = new double[nAtoms];
-//            }
             gkEnergy = 0.0;
             count = 0;
             threadID = getThreadIndex();
-//            if (gradient) {
-//                fill(gb_local, 0.0);
-//                fill(gbi_local, 0.0);
-//            }
         }
 
         @Override
@@ -350,6 +344,16 @@ public class GKEnergyRegion extends ParallelRegion {
                     if (!use[i]) {
                         continue;
                     }
+
+                    // Zero out force accumulation for atom i.
+                    dedxi = 0.0;
+                    dedyi = 0.0;
+                    dedzi = 0.0;
+                    dborni = 0.0;
+                    trqxi = 0.0;
+                    trqyi = 0.0;
+                    trqzi = 0.0;
+
                     xi = x[i];
                     yi = y[i];
                     zi = z[i];
@@ -385,7 +389,6 @@ public class GKEnergyRegion extends ParallelRegion {
                     if (iSymm == 0) {
                         // Include self-interactions for the asymmetric unit atoms.
                         interaction(i, i);
-
                             /*
                               Formula for Born energy approximation for cavitation energy is:
                               e = surfaceTension / 6 * (ri + probe)^2 * (ri/rb)^6.
@@ -402,11 +405,15 @@ public class GKEnergyRegion extends ParallelRegion {
                                 double saTerm = surfaceTension * r * r * ratio / 6.0;
                                 gkEnergy += saTerm;
                                 sharedBornGrad.sub(threadID, i, 6.0 * saTerm / born[i]);
-                                // gb_local[i] -= 6.0 * saTerm / born[i];
                                 break;
                             default:
                                 break;
                         }
+                    }
+                    if (gradient) {
+                        grad.add(threadID, i, dedxi, dedyi, dedzi);
+                        torque.add(threadID, i, trqxi, trqyi, trqzi);
+                        sharedBornGrad.add(threadID, i, dborni);
                     }
                 }
             }
@@ -416,10 +423,6 @@ public class GKEnergyRegion extends ParallelRegion {
         public void finish() {
             sharedInteractions.addAndGet(count);
             sharedGKEnergy.addAndGet(gkEnergy);
-            if (gradient) {
-                // Reduce the Born radii partial derivative contributions computed by the current thread into the shared array.
-                // sharedBornGrad.reduce(gb_local, DoubleOp.SUM);
-            }
         }
 
         private void interaction(int i, int k) {
@@ -1104,12 +1107,15 @@ public class GKEnergyRegion extends ParallelRegion {
             final double dedx = selfScale * dEdX();
             final double dedy = selfScale * dEdY();
             final double dedz = selfScale * dEdZ();
+            dedxi -= dedx;
+            dedyi -= dedy;
+            dedzi -= dedz;
+            dborni += selfScale * drbi;
 
-            grad.sub(threadID, i, dedx, dedy, dedz);
-            sharedBornGrad.add(threadID, i, selfScale * drbi);
             final double dedxk = dedx * transOp[0][0] + dedy * transOp[1][0] + dedz * transOp[2][0];
             final double dedyk = dedx * transOp[0][1] + dedy * transOp[1][1] + dedz * transOp[2][1];
             final double dedzk = dedx * transOp[0][2] + dedy * transOp[1][2] + dedz * transOp[2][2];
+
             grad.add(threadID, k, dedxk, dedyk, dedzk);
             sharedBornGrad.add(threadID, k, selfScale * drbk);
             permanentEnergyTorque(i, k);
@@ -1467,7 +1473,10 @@ public class GKEnergyRegion extends ParallelRegion {
                 tky *= selfScale;
                 tkz *= selfScale;
             }
-            torque.add(threadID, i, tix, tiy, tiz);
+            trqxi += tix;
+            trqyi += tiy;
+            trqzi += tiz;
+
             final double rtkx = tkx * transOp[0][0] + tky * transOp[1][0] + tkz * transOp[2][0];
             final double rtky = tkx * transOp[0][1] + tky * transOp[1][1] + tkz * transOp[2][1];
             final double rtkz = tkx * transOp[0][2] + tky * transOp[1][2] + tkz * transOp[2][2];
@@ -1653,7 +1662,7 @@ public class GKEnergyRegion extends ParallelRegion {
 
             // Increment the gradients and Born chain rule term.
             if (i == k && iSymm == 0) {
-                sharedBornGrad.add(threadID, i, dbi);
+                dborni += dbi;
             } else {
                 if (i == k) {
                     dpdx *= 0.5;
@@ -1662,8 +1671,11 @@ public class GKEnergyRegion extends ParallelRegion {
                     dbi *= 0.5;
                     dbk *= 0.5;
                 }
-                grad.sub(threadID, i, dpdx, dpdy, dpdz);
-                sharedBornGrad.add(threadID, i, dbi);
+                dedxi -= dpdx;
+                dedyi -= dpdy;
+                dedzi -= dpdz;
+                dborni += dbi;
+
                 final double rdpdx = dpdx * transOp[0][0] + dpdy * transOp[1][0] + dpdz * transOp[2][0];
                 final double rdpdy = dpdx * transOp[0][1] + dpdy * transOp[1][1] + dpdz * transOp[2][1];
                 final double rdpdz = dpdx * transOp[0][2] + dpdy * transOp[1][2] + dpdz * transOp[2][2];
@@ -1764,7 +1776,10 @@ public class GKEnergyRegion extends ParallelRegion {
             tkx += 2.0 * (qxyk * fkxz + qyyk * fkyz + qyzk * fkzz - qxzk * fkxy - qyzk * fkyy - qzzk * fkzy);
             tky += 2.0 * (qxzk * fkxx + qyzk * fkyx + qzzk * fkzx - qxxk * fkxz - qxyk * fkyz - qxzk * fkzz);
             tkz += 2.0 * (qxxk * fkxy + qxyk * fkyy + qxzk * fkzy - qxyk * fkxx - qyyk * fkyx - qyzk * fkzx);
-            torque.add(threadID, i, tix, tiy, tiz);
+            trqxi += tix;
+            trqyi += tiy;
+            trqzi += tiz;
+
             final double rx = tkx;
             final double ry = tky;
             final double rz = tkz;

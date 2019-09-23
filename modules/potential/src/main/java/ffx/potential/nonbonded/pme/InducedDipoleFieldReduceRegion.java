@@ -44,7 +44,6 @@ import edu.rit.pj.IntegerForLoop;
 import edu.rit.pj.IntegerSchedule;
 import edu.rit.pj.ParallelRegion;
 import edu.rit.pj.ParallelTeam;
-import edu.rit.pj.reduction.SharedDoubleArray;
 
 import ffx.numerics.atomic.AtomicDoubleArray3D;
 import ffx.potential.bonded.Atom;
@@ -54,6 +53,12 @@ import static ffx.potential.parameters.MultipoleType.t001;
 import static ffx.potential.parameters.MultipoleType.t010;
 import static ffx.potential.parameters.MultipoleType.t100;
 
+/**
+ * Parallel summation and reduction of components of the induced dipole field at each atom.
+ *
+ * @author Michael J. Schnieders
+ * @since 1.0
+ */
 public class InducedDipoleFieldReduceRegion extends ParallelRegion {
 
     private static final Logger logger = Logger.getLogger(DirectRegion.class.getName());
@@ -85,13 +90,10 @@ public class InducedDipoleFieldReduceRegion extends ParallelRegion {
     private GeneralizedKirkwood generalizedKirkwood;
     private double aewald;
     private double aewald3;
-
-    private final int maxThreads;
-    private final PCGLoop[] pcgLoop;
+    private final InducedDipoleFieldReduceLoop[] inducedDipoleFieldReduceLoop;
 
     public InducedDipoleFieldReduceRegion(int nt) {
-        maxThreads = nt;
-        pcgLoop = new PCGLoop[nt];
+        inducedDipoleFieldReduceLoop = new InducedDipoleFieldReduceLoop[nt];
     }
 
     public void init(Atom[] atoms, double[][][] inducedDipole, double[][][] inducedDipoleCR,
@@ -107,15 +109,16 @@ public class InducedDipoleFieldReduceRegion extends ParallelRegion {
         this.generalizedKirkwood = generalizedKirkwood;
         this.aewald = ewaldParameters.aewald;
         this.aewald3 = ewaldParameters.aewald3;
-        // Output
         this.cartesianDipolePhi = cartesianDipolePhi;
         this.cartesianDipolePhiCR = cartesianDipolePhiCR;
+        // Output
         this.field = field;
         this.fieldCR = fieldCR;
     }
 
     /**
      * Execute the InducedDipoleFieldReduceRegion with the passed ParallelTeam.
+     *
      * @param parallelTeam The ParallelTeam instance to execute with.
      */
     public void executeWith(ParallelTeam parallelTeam) {
@@ -130,12 +133,12 @@ public class InducedDipoleFieldReduceRegion extends ParallelRegion {
     @Override
     public void run() throws Exception {
         try {
-            int ti = getThreadIndex();
-            if (pcgLoop[ti] == null) {
-                pcgLoop[ti] = new PCGLoop();
+            int threadID = getThreadIndex();
+            if (inducedDipoleFieldReduceLoop[threadID] == null) {
+                inducedDipoleFieldReduceLoop[threadID] = new InducedDipoleFieldReduceLoop();
             }
             int nAtoms = atoms.length;
-            execute(0, nAtoms - 1, pcgLoop[ti]);
+            execute(0, nAtoms - 1, inducedDipoleFieldReduceLoop[threadID]);
         } catch (Exception e) {
             String message = " Fatal exception computing the mutual induced dipoles in thread " + getThreadIndex() + "\n";
             logger.log(Level.SEVERE, message, e);
@@ -143,7 +146,7 @@ public class InducedDipoleFieldReduceRegion extends ParallelRegion {
 
     }
 
-    private class PCGLoop extends IntegerForLoop {
+    private class InducedDipoleFieldReduceLoop extends IntegerForLoop {
 
         @Override
         public IntegerSchedule schedule() {
@@ -155,8 +158,8 @@ public class InducedDipoleFieldReduceRegion extends ParallelRegion {
             int threadID = getThreadIndex();
             final double[][] induced0 = inducedDipole[0];
             final double[][] inducedCR0 = inducedDipoleCR[0];
+            // Add the PME self and reciprocal space fields to the real space field.
             if (aewald > 0.0) {
-                // Add the self and reciprocal space fields to the real space field.
                 for (int i = lb; i <= ub; i++) {
                     double[] dipolei = induced0[i];
                     double[] dipoleCRi = inducedCR0[i];
@@ -172,15 +175,16 @@ public class InducedDipoleFieldReduceRegion extends ParallelRegion {
                     fieldCR.add(threadID, i, fxCR, fyCR, fzCR);
                 }
             }
+            // Add the GK reaction field.
             if (generalizedKirkwoodTerm) {
-                AtomicDoubleArray3D gkField = generalizedKirkwood.sharedGKField;
-                AtomicDoubleArray3D gkFieldCR = generalizedKirkwood.sharedGKFieldCR;
-                // Add the GK reaction field to the intramolecular field.
+                AtomicDoubleArray3D fieldGK = generalizedKirkwood.getFieldGK();
+                AtomicDoubleArray3D fieldGKCR = generalizedKirkwood.getFieldGKCR();
                 for (int i = lb; i <= ub; i++) {
-                    field.add(threadID, i, gkField.getX(i), gkField.getY(i), gkField.getZ(i));
-                    fieldCR.add(threadID, i, gkFieldCR.getX(i), gkFieldCR.getY(i), gkFieldCR.getZ(i));
+                    field.add(threadID, i, fieldGK.getX(i), fieldGK.getY(i), fieldGK.getZ(i));
+                    fieldCR.add(threadID, i, fieldGKCR.getX(i), fieldGKCR.getY(i), fieldGKCR.getZ(i));
                 }
             }
+            // Reduce the PME and GK contributions.
             field.reduce(lb, ub);
             fieldCR.reduce(lb, ub);
         }

@@ -46,7 +46,6 @@ import edu.rit.pj.IntegerForLoop;
 import edu.rit.pj.IntegerSchedule;
 import edu.rit.pj.ParallelRegion;
 import edu.rit.pj.reduction.SharedDouble;
-import edu.rit.pj.reduction.SharedDoubleArray;
 
 import ffx.numerics.atomic.AtomicDoubleArray3D;
 import ffx.potential.bonded.Atom;
@@ -57,6 +56,12 @@ import static ffx.potential.parameters.MultipoleType.t001;
 import static ffx.potential.parameters.MultipoleType.t010;
 import static ffx.potential.parameters.MultipoleType.t100;
 
+/**
+ * Parallel successive over-relaxation (SOR) solver for the self-consistent field.
+ *
+ * @author Michael J. Schnieders
+ * @since 1.0
+ */
 public class SORRegion extends ParallelRegion {
 
     private static final Logger logger = Logger.getLogger(SORRegion.class.getName());
@@ -206,12 +211,12 @@ public class SORRegion extends ParallelRegion {
             }
 
             if (generalizedKirkwoodTerm) {
-                AtomicDoubleArray3D gkField = generalizedKirkwood.sharedGKField;
-                AtomicDoubleArray3D gkFieldCR = generalizedKirkwood.sharedGKFieldCR;
+                AtomicDoubleArray3D fieldGK = generalizedKirkwood.getFieldGK();
+                AtomicDoubleArray3D fieldGKCR = generalizedKirkwood.getFieldGKCR();
                 // Add the GK reaction field to the intra-molecular field.
                 for (int i = lb; i <= ub; i++) {
-                    field.add(threadID, i, gkField.getX(i), gkField.getY(i), gkField.getZ(i));
-                    fieldCR.add(threadID, i, gkFieldCR.getX(i), gkFieldCR.getY(i), gkFieldCR.getZ(i));
+                    field.add(threadID, i, fieldGK.getX(i), fieldGK.getY(i), fieldGK.getZ(i));
+                    fieldCR.add(threadID, i, fieldGKCR.getX(i), fieldGKCR.getY(i), fieldGKCR.getZ(i));
                 }
             }
 

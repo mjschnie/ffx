@@ -43,7 +43,6 @@ import java.util.logging.Logger;
 import edu.rit.pj.IntegerForLoop;
 import edu.rit.pj.IntegerSchedule;
 import edu.rit.pj.ParallelRegion;
-import edu.rit.pj.reduction.SharedDoubleArray;
 
 import ffx.numerics.atomic.AtomicDoubleArray3D;
 import ffx.potential.bonded.Atom;
@@ -53,6 +52,12 @@ import static ffx.potential.parameters.MultipoleType.t001;
 import static ffx.potential.parameters.MultipoleType.t010;
 import static ffx.potential.parameters.MultipoleType.t100;
 
+/**
+ * Parallel computation of the OPT induced dipoles.
+ *
+ * @author Michael J. Schnieders
+ * @since 1.0
+ */
 public class OPTRegion extends ParallelRegion {
 
     private static final Logger logger = Logger.getLogger(OPTRegion.class.getName());
@@ -88,10 +93,9 @@ public class OPTRegion extends ParallelRegion {
     private double aewald3;
 
     private int currentOptOrder;
-    private final int maxThreads;
     private final OPTLoop[] optLoop;
     public final double[] optCoefficients;
-    public final double[] optCoefficientsSum;
+    private final double[] optCoefficientsSum;
 
     /**
      * Induced dipoles for extrapolated perturbation theory.
@@ -101,7 +105,6 @@ public class OPTRegion extends ParallelRegion {
     public double[][][] optDipoleCR;
 
     public OPTRegion(int nt) {
-        maxThreads = nt;
         optLoop = new OPTLoop[nt];
         optCoefficients = new double[optOrder + 1];
         optCoefficientsSum = new double[optOrder + 1];
@@ -226,12 +229,12 @@ public class OPTRegion extends ParallelRegion {
                 }
             }
             if (generalizedKirkwoodTerm) {
-                AtomicDoubleArray3D gkField = generalizedKirkwood.sharedGKField;
-                AtomicDoubleArray3D gkFieldCR = generalizedKirkwood.sharedGKFieldCR;
+                AtomicDoubleArray3D fieldGK = generalizedKirkwood.getFieldGK();
+                AtomicDoubleArray3D fieldGKCR = generalizedKirkwood.getFieldGKCR();
                 // Add the GK reaction field to the intramolecular field.
                 for (int i = lb; i <= ub; i++) {
-                    field.add(threadID, i, gkField.getX(i), gkField.getY(i), gkField.getZ(i));
-                    fieldCR.add(threadID, i, gkFieldCR.getX(i), gkFieldCR.getY(i), gkFieldCR.getZ(i));
+                    field.add(threadID, i, fieldGK.getX(i), fieldGK.getY(i), fieldGK.getZ(i));
+                    fieldCR.add(threadID, i, fieldGKCR.getX(i), fieldGKCR.getY(i), fieldGKCR.getZ(i));
                 }
             }
 
