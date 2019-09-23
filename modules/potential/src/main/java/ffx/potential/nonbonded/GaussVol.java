@@ -133,7 +133,13 @@ public class GaussVol {
     private static double ANG3 = 1.0;
     private static double VOLMINA = 0.01 * ANG3;
     private static double VOLMINB = 0.1 * ANG3;
-    private static String CROSSOVER = "4.49";
+    /**
+     * Original crossover in Schnieders thesis: 3.0*(surface tension/solvent pressure)
+     * Initially set to 7.339 to match value in Tinker
+     * Later updated to 4.49 based on work with Schnieders thesis compounds in Sept 2019
+     * Most recently set to 9.00 to better match experiment
+     */
+    private static String CROSSOVER = "9.00";
 
     /**
      * Number of atoms.
@@ -203,9 +209,11 @@ public class GaussVol {
     private double[] surfaceAreaGradient;
     /**
      * Solvent pressure in kcal/mol/Ang^3.
+     * Original value from Schnieders thesis work: 0.0327
+     * Value based on testing with Schnieders thesis test set, Sept 2019: 0.11337
      */
     //private double solventPressure = 0.0327;
-    private double solventPressure = 0.11337;
+    private double solventPressure = 0.05185;
     /**
      * Volume offset in Ang^3
      * Set based on comparison of FFX Volumes for small alkanes (methane-decane)
