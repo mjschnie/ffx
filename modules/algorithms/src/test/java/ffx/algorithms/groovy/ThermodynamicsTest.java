@@ -108,15 +108,16 @@ public class ThermodynamicsTest extends PJDependentTest {
                         "Acetamide Implicit Solvation Gradients: L = 0.9",
                         new String[]{"ffx/algorithms/structures/acetamide.gk.xyz"},
                         ThermoTestMode.GRAD, false, 0, 0, intRange(1, 3),
-                        new double[]{-19.5922844295, Double.NaN}, new double[]{-9.19007695807, Double.NaN},
+                        // new double[]{-19.5922844295, Double.NaN}, new double[]{-9.19007695807, Double.NaN},
+                        new double[]{ -18.85584096, Double.NaN}, new double[]{-8.371806437, Double.NaN},
                         new double[]{-0.411272333503, Double.NaN},
                         new double[][][]{
-                                {{-0.8544588637862096, -0.8397341056649319, 0.06944048731983576},
-                                        {6.30104595968044, -0.9009925550282452, 5.046876586138691}},
+                                {{-0.9032063972624029, -0.9091307927702053, 0.07070715071076905},
+                                        {6.336321525587566, -0.9091139791706401, 5.073742114349582}},
                                 new double[2][3]},
                         new double[][][]{
-                                {{2.122123094590772, -0.3675862098101905, 1.2596680521465866},
-                                        {-10.529753005123064, -1.373066839187758, -4.523110481468447}},
+                                {{2.0679591685061096, -0.4446936399271604, 1.2610754559142918},
+                                        {-10.490557931892937, -1.382090643790419, -4.493259894567457}},
                                 new double[2][3]},
                         new String[]{"-l", "0.9", "--s1", "1", "--f1", "9", "--s1", "1", "--f1", "9"}, new String[]{}, new String[]{}
                 },
@@ -124,15 +125,15 @@ public class ThermodynamicsTest extends PJDependentTest {
                         "Acetamide Implicit Solvation Gradients: L = 1.0",
                         new String[]{"ffx/algorithms/structures/acetamide.gk.xyz"},
                         ThermoTestMode.GRAD, false, 0, 0, intRange(1, 3),
-                        new double[]{-20.502726265304613, Double.NaN}, new double[]{-8.886170765485948, Double.NaN},
+                        new double[]{-19.68445574427762, Double.NaN}, new double[]{-8.067900244458935, Double.NaN},
                         new double[]{7.5710964747886464, Double.NaN},
                         new double[][][]{
-                                {{-0.6401640209225425, -0.8766508210158941, 0.19690714293276135},
-                                        {5.247970188816955, -1.0376514990277212, 4.594419906332998}},
+                                {{-0.6943279470072035, -0.9537582511328658, 0.198314546700465},
+                                        {5.287165262047079, -1.046675303630384, 4.624270493233988}},
                                 new double[2][3]},
                         new double[][][]{
-                                {{2.1971886563390255, -0.37412187773949396, 1.31442990722058},
-                                        {-10.533640299360645, -1.3498665433258301, -4.528166513960421}},
+                                {{2.143024730254365, -0.45122930785646503, 1.315837310988282},
+                                        {-10.494445226130521, -1.3588903479284937, -4.49831592705943}},
                                 new double[2][3]},
                         new String[]{"-l", "1.0", "--s1", "1", "--f1", "9", "--s1", "1", "--f1", "9"}, new String[]{}, new String[]{}
                 },
